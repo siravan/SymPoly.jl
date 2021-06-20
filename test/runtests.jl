@@ -65,6 +65,37 @@ function test_factor(x)
     outcome
 end
 
+function test_fraction(x; n=10)
+    k = 0
+    outcome = true
+    Π = Float64(π)
+
+    for i = 1:n
+        p = generate_rand_poly(x; min_deg=1, max_deg=6)
+        printstyled("P = ", p, '\n'; color=:green)
+
+        q = generate_rand_poly(x; min_deg=1, max_deg=2) *
+            generate_rand_poly(x; min_deg=1, max_deg=2) *
+            generate_rand_poly(x; min_deg=2, max_deg=3)
+
+        printstyled("Q = ", q, '\n'; color=:blue)
+
+        try
+            f = expand_frac(p, q)
+            printstyled("P / Q = ", sym(f), '\n'; color=:red)
+            ρ = (p(Π) / q(Π)) / substitute(sym(f), Dict(x => Π))
+            if abs(ρ - 1) > 1e-5
+                outcome = false
+            else
+                k += 1
+            end
+        catch e
+            println(e)
+        end
+    end
+    outcome
+end
+
 #############################################################################
 
 @testset "arith" begin
@@ -73,4 +104,5 @@ end
     @test test_eq(x, (p,q)->p % gcd(p,q)+q % gcd(p,q), "gcd"; max_deg=5)
     @test test_deriv(x)
     @test test_factor(x)
+    @test test_fraction(x)
 end

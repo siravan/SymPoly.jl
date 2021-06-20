@@ -6,13 +6,17 @@ function generate_rand_poly(x; min_deg=0, max_deg=20, sparcity=0.5)
     n = rand(min_deg:max_deg)
     p = Poly(Rational{BigInt}, x)
     r = rand(1:10) // rand(1:10)
-    for i = 0:n
-        if rand() > sparcity || i == n
-            s = rand() < 0.5 ? +1 : -1
-            p[i] = s * r * rand(0:10)//rand(1:5)
+    while true
+        for i = 0:n
+            if rand() > sparcity || i == n
+                s = rand() < 0.5 ? +1 : -1
+                p[i] = s * r * rand(0:10)//rand(1:5)
+            end
+        end
+        if !iszero(p)
+            return p
         end
     end
-    p
 end
 
 function test_eq(x, f, name; n=10, abstol=1e-8, min_deg=0, max_deg=20, sparcity=0.5)

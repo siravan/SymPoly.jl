@@ -83,6 +83,17 @@ The result is `2x*y - (2(y^2))`. We expect `x - y` as `p` is `(x-y)*(x+y)` and `
 
 The extended Euclid algorithm is available as `gcdx(p::Poly, q::Poly)` and returns three values `g, s, t`, such as `g` is the GCD and `g = s*p + t*q`.
 
+### Polynomial Evaluation
+
+The value of a polynomial `p` for a certain value of the main variable (`x`), say `x₀`, can be calculated as `p(x₀)`. For example,
+
+```julia
+  p = poly(3x^2 - 5x*y + 7y^2, x)
+  println(p(2))
+```
+
+prints `12 + 7(y^2) - (10y)`.
+
 ### Root-Finding
 
 We can find the real and complex roots of a polynomial with constant coefficients using `find_roots(p::Poly, x)`. It returns two arrays, the first one is a list of the real roots and the second one is a list of the complex ones. For example,
@@ -122,3 +133,25 @@ Now, `p` is `x^5 + 26(x^3) + 10(x^4) - 250 - (75x)`. We factor it as `f = factor
 ```
 
 We can generate a **Symbolics** expression showing the factorization as `sym(f)`, which returns `(x - 2)*(5 + x^2 + 2x)*((5 + x)^2)`. We can also convert it to a `Poly` by `poly(f)`; however, the output will be simplified to its non-factorized form.
+
+### Partial Fraction Decomposition
+
+[Partial Fraction Decomposition](https://en.wikipedia.org/wiki/Partial_fraction_decomposition) is the conversion of a fraction, where both the numerator and denominator are polynomials, to a sum of simpler fractions. Partial fraction decomposition has many applications, including in symbolic integration.
+
+**SymPoly** uses the Hermite's method based on the square-free decomposition of the denominator to perform partial fraction decomposition. Let `p` be the numerator and `q` the denominator, where both are polynomials on the same variable. We can calculate the partial fraction decomposition of `p / q` by using `expand_frac(p, q)`. For example,
+
+```julia
+  p = poly(x^4 + 6x^3 + 7x^2 +6x + 4, x)
+  q = poly(x^6 + 2x^5 + 4x^4 + 4x^3 + 4x^2 + 2x + 1, x)
+  f = expand_frac(p, q)
+```
+
+returns `(2 + 2x - (x^2))*((1 + 2x + x^4 + 3(x^2) + 2(x^3))^-1) + 2((1 + x^2)^-1)`. Note that `f` is of type `FactoredFraction`. We can list individual factors using `factors(f)`:
+
+```julia
+2-element Vector{Tuple{Poly, Poly}}:
+  (2, 1 + x^2)
+  (2 + 2x - (x^2), 1 + 2x + x^4 + 3(x^2) + 2(x^3))
+```
+
+where each tuple represents a fraction, the first item is the numerator and the second one the denominator. So, `(2, 1 + x^2)` means `2 / (1 + x^2)`.

@@ -97,11 +97,11 @@ function gcd_naive(u::Poly, v::Poly)
 end
 
 function gcd_monic(u::Poly, v::Poly)
-    if degree(u) == 0 || degree(v) == 0
+    if degree(u) == 0 && degree(v) == 0
         return gcd(cont(u), cont(v))
     end
     u = u / leading(u)
-    while degree(v) > 0        
+    while !iszero(v) # degree(v) > 0
         v = v / leading(v)
         u, v = v, u % v
     end
@@ -109,7 +109,7 @@ function gcd_monic(u::Poly, v::Poly)
 end
 
 function gcd_extended(u::Poly, v::Poly; op=/)
-    if degree(u) == 0 || degree(v) == 0
+    if degree(u) == 0 && degree(v) == 0
         return gcdx(cont(u), cont(v))
     end
 
@@ -118,8 +118,8 @@ function gcd_extended(u::Poly, v::Poly; op=/)
     sᵥ = zero(v.T)
     tᵥ = one(v.T)
 
-    while degree(v) > 0
-        q, r = divide_poly(u, v; op)
+    while !iszero(v) # degree(v) > 0
+        q, r = divide_poly(u, v; op)        
         s, t = sᵤ - q*sᵥ, tᵤ - q*tᵥ
         u, sᵤ, tᵤ = v, sᵥ, tᵥ
         v, sᵥ, tᵥ = r, s, t

@@ -23,6 +23,8 @@ include("factors.jl")
 
 export FactoredPoly, factors, factor_schubert_kronecker, decompose, recompose, factor
 
-include("tests.jl")
+include("fractions.jl")
+
+export FactoredFraction, expand_frac
 
 end # module

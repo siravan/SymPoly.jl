@@ -8,7 +8,7 @@ end
 
 factors(f::FactoredPoly) = f.factors
 
-function add_factor!(f::FactoredPoly, p, power=1)
+function add_factor!(f::FactoredPoly, p::Poly, power::Int=1)
     push!(f.factors, p => power)
 end
 
@@ -181,7 +181,7 @@ function decompose(p::Poly)
     end
 
     if c != 1
-        push!(f, (Poly(c), 0))
+        add_factor!(f, polyas(p, c), 1)        
     end
 
     return f
