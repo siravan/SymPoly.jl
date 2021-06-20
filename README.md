@@ -73,8 +73,8 @@ Finding the GCD of two polynomials is one of the basic blocks of many advanced p
 prints `x - 1`. We can also use `gcd` for polynomials whose coefficients are functions of other symbols:
 
 ```julia
-  p = poly(x^2 - y^2)
-  q = poly(x^2 - 2x*y +y^2)
+  p = poly(x^2 - y^2, x)
+  q = poly(x^2 - 2x*y + y^2, x)
   g = gcd(p, q)
   println(g)
 ```
