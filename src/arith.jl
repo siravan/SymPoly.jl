@@ -59,9 +59,7 @@ function divide_poly(u::Poly, v::Poly; op=/)
         end
     end
 
-    update_order!(r)
-
-    q, r
+    q, update_order(r)
 end
 
 function Base.:/(u::Poly, v::Poly)
@@ -92,10 +90,9 @@ Base.:^(p::Poly, k) = poly(sym(p)^k, p.x)
 ##############################################################################
 
 function gcd_naive(u::Poly, v::Poly)
-    while degree(v) > 0   
-        println(u, '\t', v)     
+    while degree(v) > 0
         u, v = v, u % v
-    end    
+    end
     return iszero(v) ? u : 1
 end
 
@@ -114,18 +111,18 @@ end
 function gcd_extended(u::Poly, v::Poly; op=/)
     if degree(u) == 0 || degree(v) == 0
         return gcdx(cont(u), cont(v))
-    end    
-    
+    end
+
     sᵤ = one(u.T)
     tᵤ = zero(u.T)
     sᵥ = zero(v.T)
     tᵥ = one(v.T)
-    
+
     while degree(v) > 0
         q, r = divide_poly(u, v; op)
         s, t = sᵤ - q*sᵥ, tᵤ - q*tᵥ
         u, sᵤ, tᵤ = v, sᵥ, tᵥ
-        v, sᵥ, tᵥ = r, s, t          
+        v, sᵥ, tᵥ = r, s, t
     end
 
     l = leading(u)
@@ -209,5 +206,5 @@ end
 function integer_poly(p::Poly)
     p = rationalize(p)
     l = lcm(denominator.(extract_coef(p))...)
-    return 1//l, p*l    
-end 
+    return 1//l, p*l
+end

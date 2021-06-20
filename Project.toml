@@ -2,3 +2,9 @@ name = "SymPoly"
 uuid = "a55700a0-4576-423d-b8b7-d0f96944b1b5"
 authors = ["Shahriar Iravanian <siravan@svtsim.com>"]
 version = "0.1.0"
+
+[deps]
+Primes = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
+SymbolicUtils = "d1185830-fcd6-423d-90d6-eec64667417b"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

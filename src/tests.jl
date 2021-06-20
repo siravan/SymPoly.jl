@@ -7,7 +7,7 @@ function generate_rand_poly(x; min_deg=0, max_deg=20, sparcity=0.5, rational=0.2
     for i = 0:n
         if rand() > sparcity || i == n
             s = rand() < 0.5 ? +1 : -1
-            p[i] = (p.T == Rational ? s * r * rand(0:10)//rand(1:5) : s * 10 * randn()) 
+            p[i] = (p.T == Rational ? s * r * rand(0:10)//rand(1:5) : s * 10 * randn())
         end
     end
     p
@@ -17,11 +17,11 @@ function test_eq(x, f; n=10, abstol=1e-8, min_deg=0, max_deg=20, sparcity=0.5, r
     k = 0
     for i = 1:n
         p = generate_rand_poly(x; max_deg, sparcity, rational)
-        q = generate_rand_poly(x; min_deg, max_deg, sparcity, rational)      
-        try  
+        q = generate_rand_poly(x; min_deg, max_deg, sparcity, rational)
+        try
             r = f(p, q)
-            if abs(maximum(extract_coef(r))) > abstol            
-                @warn "+/- mismatch: $r"  
+            if abs(maximum(extract_coef(r))) > abstol
+                @warn "+/- mismatch: $r"
                 println(p, ", ", q)
             else
                 k += 1
@@ -29,7 +29,7 @@ function test_eq(x, f; n=10, abstol=1e-8, min_deg=0, max_deg=20, sparcity=0.5, r
         catch e
             println(e)
             println(p, ", ", q)
-        end        
+        end
     end
     @info "$k ok!"
 end
@@ -42,10 +42,10 @@ function test_deriv(x; n=10, min_deg=0, max_deg=20, sparcity=0.5, rational=1)
     k = 0
     for i = 1:n
         p = generate_rand_poly(x; min_deg, max_deg, sparcity, rational)
-        try 
+        try
             q = derivative(p)
             Δp = p - integrate(q)
-            if degree(Δp) > 0
+            if SymPoly.degree(Δp) > 0
                 @warn "deriv/integrate mismatch: $Δp"
             else
                 k += 1
@@ -53,7 +53,7 @@ function test_deriv(x; n=10, min_deg=0, max_deg=20, sparcity=0.5, rational=1)
         catch e
             println(e)
         end
-    end 
+    end
     @info "$k ok!"
 end
 
@@ -67,14 +67,14 @@ function test_shubert(x; n=10, min_deg=1, max_deg=3, sparcity=0.5, rational=1)
         _, p2 = integer_poly(p2)
         _, p3 = integer_poly(p3)
         p = p1 * p2 * p3
-        try 
+        try
             println('(',p1,") * (",p2,") * (",p3,')')
             println("\t=> ", factor_schubert_kronecker(p))
             k += 1
         catch e
             println(e)
         end
-    end 
+    end
     @info "$k ok!"
 end
 
@@ -106,15 +106,15 @@ function test_factor(x)
     ]
 
     k = 0
-    for p = ps        
-        try 
+    for p = ps
+        try
             printstyled(p, '\n'; color=:green)
             f = factor(p; verbose=true)
             println("\t", f)
             k += 1
             # q = expand(*(f...))
             # if iszero(p - q)
-            #     @info "OK!"               
+            #     @info "OK!"
             #     k += 1
             # else
             #     @warn "mismatch!"
@@ -122,6 +122,6 @@ function test_factor(x)
         catch e
             println(e)
         end
-    end 
+    end
     @info "$k ok!"
 end

@@ -11,27 +11,18 @@ mutable struct Poly
 end
 
 # a series of helper functions to facilitate generation of low-degree polynomials
-function gen_poly(T::Type, x, a...)    
+function gen_poly(T::Type, x, a...)
     p = Poly(T, x)
-    
+
     for (i, val) in enumerate(a)
-        p[i-1] = val 
+        p[i-1] = val
     end
-    
-    update_order!(p)
     p
-end 
+end
 
 gen_poly(x, a...) = gen_poly(Any, x, a...)
 
-function degree(p::Poly)
-    d = p.n
-    while d > 0 && iszero(p[d])
-        d -= 1
-    end
-    d
-end
-
+degree(p::Poly) = p.n
 degree(p::Poly, x) = isequal(p.x, x) ? degree(p) : degree(sym(p), x)
 
 """
@@ -48,23 +39,26 @@ leading(p::Poly) = degree(p) > 0 ? p[degree(p)] : p.a₀
 cont(p::Poly) = (p.n > 0 ? gcd(p.a₀, values(p.terms)...) : p.a₀) * sign(leading(p))
 prim(p::Poly) = p / cont(p)
 
-function update_order!(p::Poly)
-    p.n == 0 && return 0
-    while iszero(p[p.n]) && p.n>0
-        delete!(p.terms, p.n)
-        p.n -= 1
-    end
-    if p.n == 0
-        p.terms = nothing 
-    end
-    p
-end
+# function update_order!(p::Poly)
+#     println(p)
+#     p.n == 0 && return 0
+#     while (!haskey(p.terms, p.n) || iszero(p[p.n])) && p.n>0
+#         delete!(p.terms, p.n)
+#         p.n -= 1
+#     end
+#     if p.n == 0
+#         p.terms = nothing
+#     end
+#     p
+# end
+
+update_order(p::Poly) = poly(p.T, sym(p), p.x)
 
 function poly(T::Type, eq, x)
     x === nothing && return Poly(T, nothing, 0, eq, nothing)
     terms = collect_powers(eq, x)
     terms = Dict{Int,Any}(convert(Int,k) => val for (k,val) in terms)
-    
+
     if haskey(terms, 0)
         a₀ = terms[0]
         delete!(terms, 0)
@@ -107,10 +101,13 @@ end
 function Base.setindex!(p::Poly, term, k::Number)
     if k == 0
         p.a₀ = term
-    elseif p.terms !== nothing && iszero(term)
+    elseif p.terms !== nothing && isequal(term, 0)
         delete!(p.terms, k)
-        if k == p.n
-            update_order!(p)
+        if isempty(p.terms)
+            p.n = 0
+            p.terms = nothing
+        else
+            p.n = maximum(keys(p.terms))
         end
     else
         if p.terms === nothing
@@ -128,9 +125,10 @@ sym(p::Poly) = (p.x === nothing ? p.a₀ : sum([simplify_rational(p[k])*p.x^k fo
 sym(x) = x
 
 function Base.iszero(p::Poly)
-    !iszero(simplify(p.a₀)) && return false
-    p.n > 0 && return all(iszero, values(p.terms))
-    true
+    isequal(sym(p), 0)
+    # !isequal(simplify(p.a₀), 0) && return false
+    # p.n > 0 && return all(x -> isequal(x,0), values(p.terms))
+    # true
 end
 
 Base.show(io::IO, p::Poly) = print(io, sym(p))
@@ -179,9 +177,9 @@ function collect_powers(eq, x)
     elseif is_pox(eq)
         return Dict{Any, Any}(get_power(eq) => get_coef(eq))
     else
-        eqs = Dict{Any, Any}()        
+        eqs = Dict{Any, Any}()
         for term in arguments(eq)
-            n = get_power(term)            
+            n = get_power(term)
             if haskey(eqs, n)
                 eqs[n] = eqs[n] + get_coef(term)
             else
@@ -192,4 +190,3 @@ function collect_powers(eq, x)
         return eqs
     end
 end
-
