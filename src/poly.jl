@@ -50,7 +50,7 @@ prim(p::Poly) = p / cont(p)
 #         p.terms = nothing
 #     end
 #     p
-# end
+# end  
 
 update_order(p::Poly) = poly(p.T, sym(p), p.x)
 
