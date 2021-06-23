@@ -139,7 +139,7 @@ x⁵ + 10x⁴ + 26x³ - 75x - 250
 
 [Partial Fraction Decomposition](https://en.wikipedia.org/wiki/Partial_fraction_decomposition) is the conversion of a fraction, where both the numerator and denominator are polynomials, to a sum of simpler fractions. Partial fraction decomposition has many applications, including in symbolic integration.
 
-**SymPoly** uses the Hermite's method based on the square-free decomposition of the denominator to perform partial fraction decomposition. Let `p` be the numerator and `q` the denominator, where both are polynomials on the same variable. We can calculate the partial fraction decomposition of `p / q` by using `expand_frac(p, q)`. For example,
+**SymPoly** uses the Hermite's method based on the square-free decomposition of the denominator to perform partial fraction decomposition. Let `p` be the numerator and `q` the denominator, where both are polynomials on the same variable. We can calculate the partial fraction decomposition of `p / q` by using `factor(p / q)`. For example,
 
 ```julia
 julia> p = x^4 + 6x^3 + 7x^2 +6x + 4
@@ -172,4 +172,4 @@ julia> isequal(a + b, p / q)
 true
 ```
 
-While `factor(RationalPoly)` returns a `FactoredPoly` as the factorization functions, the interpretation of the results is different. First, the factors are added not multiplied. Second, the power applies only to the denominator. For example, `(-x² + 2x + 2) / (x² + x + 1) => 2` above means `(-x² + 2x + 2) / (x² + x + 1)^2`.
+While `factor(RationalPoly)` returns a `FactoredPoly` as the factorization functions, the interpretation of the results is different. First, the factors are additive not multiplicative. Second, the power applies only to the denominator. For example, `(-x² + 2x + 2) / (x² + x + 1) => 2` above means `(-x² + 2x + 2) / (x² + x + 1)^2`.
