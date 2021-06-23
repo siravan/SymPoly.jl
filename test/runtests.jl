@@ -1,20 +1,18 @@
 include("utils.jl")
 
-function test_deriv(x; n=10, min_deg=0, max_deg=20, sparcity=0.5)
+@syms 𝑥
+@polyvar x
+
+function test_deriv(x; n=10, min_deg=1, max_deg=6, sparcity=0.5)
     k = 0
     outcome = true
     for i = 1:n
         p = generate_rand_poly(x; min_deg, max_deg, sparcity)
-        printstyled("P = ", p, '\n'; color=:green)
+        printstyled("P = ", unrationalize(p), '\n'; color=:green)
         try
             q = derivative(p)
-            printstyled("∂p/∂x = ", q, '\n'; color=:red)
-            Δp = p - integrate(q)
-            if SymPoly.degree(update_order(Δp)) > 0
-                outcome = false
-            else
-                k += 1
-            end
+            printstyled("∂p/∂x = ", unrationalize(q), '\n'; color=:red)
+            k += 1
         catch e
             println(e)
         end
@@ -24,29 +22,28 @@ end
 
 function test_factor(x)
     ps = [
-        gen_poly(x,  64, 56, 14, 1),
-        gen_poly(x,  -12, 53, -57, 18),
-        gen_poly(x,  273, -86, -73, 6),
-        gen_poly(x,  -2, -1, 4, -1, 6),
-        gen_poly(x,  -30, -33, 8, -11, 6),
-        gen_poly(x,  -2, 7, 20, -24, -6, 5),
-        gen_poly(x,  8, -38, 27, 47, -11, 15),
-        poly(x^4 - 4, x),
-        poly(x^4 -8x^2 - 9, x),
-        poly(6x^4 - 7x^3 + 5x^2 - 20x + 17, x),
-        poly(x^6 - 1, x),
-        poly(x^6 + 1, x),
-        poly(x^5 + x + 1, x),
-        gen_poly(x,  -35, 11, 6),
-        gen_poly(x,  -16, 25),
-        gen_poly(x,  4, -13, 24, -19, 6),
-        gen_poly(x,  -2, 3, 5, 4, 2, 2, 2),
-        gen_poly(x,  -27, 117, -90, 90, -48, 8),
-        gen_poly(x,  2, 9, 25, 35, 39, 30),
-        gen_poly(x,  -1, 1, 2, -2, -1, 1),
-        gen_poly(x,  1, 2, 1, 1, 2, 1, 1, 2, 2, 2, 1),
-        poly(x^8 - 4x^6 + 16x^2 - 16, x),
-        # gen_poly(x,  -1, 0, 3, 2, -3, -6, 6, 3, -2, -3, 1),
+        x^3 + 14x^2 + 56x + 64,
+        18x^3 - 57x^2 + 53x - 12,
+        6x^3 - 73x^2 - 86x + 273,
+        6x^4 - x^3 + 4x^2 - x - 2,
+        6x^4 - 11x^3 + 8x^2 - 33x - 30,
+        5x^5 - 6x^4 - 24x^3 + 20x^2 + 7x - 2,
+        15x^5 - 11x^4 + 47x^3 + 27x^2 - 38x + 8,
+        x^4 - 4,
+        x^4 - 8x^2 - 9,
+        6x^4 - 7x^3 + 5x^2 - 20x + 17,
+        x^6 - 1,
+        x^6 + 1,
+        x^5 + x + 1,
+        6x^2 + 11x - 35,
+        25x^4 - 16,
+        6x^4 - 19x^3 + 24x^2 - 13x + 4,
+        2x^6 + 2x^5 + 2x^4 + 4x^3 + 5x^2 - 3x - 2,
+        8x^5 - 48x^4 + 90x^3 - 90x^2 + 117x - 27,
+        # 30x^5 + 39x^4 + 35x^3 + 25x^2 + 9x + 2,
+        x^5 - x^4 - 2x^3 + 2x^2 + x - 1,
+        x^10 + 2x^9 + 2x^8 + 2x^7 + x^6 + x^5 + 2x^4 + x^3 + x^2 + 2x + 1,
+        x^8 - 4x^6 + 16x^2 - 16
     ]
 
     k = 0
@@ -54,9 +51,10 @@ function test_factor(x)
     for p = ps
         try
             printstyled(p, '\n'; color=:green)
-            f = factor(p; verbose=true)
+            f = factor(p)
             outcome = outcome && (f != nothing)
-            println('\t', f)
+            printstyled(poly(f), '\n'; color=:red)
+            println(f)
             k += 1
         catch e
             println(e)
@@ -68,23 +66,20 @@ end
 function test_fraction(x; n=10)
     k = 0
     outcome = true
-    Π = Float64(π)
 
     for i = 1:n
         p = generate_rand_poly(x; min_deg=1, max_deg=6)
-        printstyled("P = ", p, '\n'; color=:green)
 
         q = generate_rand_poly(x; min_deg=1, max_deg=2) *
             generate_rand_poly(x; min_deg=1, max_deg=2) *
             generate_rand_poly(x; min_deg=2, max_deg=3)
 
-        printstyled("Q = ", q, '\n'; color=:blue)
+        printstyled("P/Q = ", p/q, '\n'; color=:green)
 
         try
-            f = expand_frac(p, q)
-            printstyled("P / Q = ", sym(f), '\n'; color=:red)
-            ρ = (p(Π) / q(Π)) / substitute(sym(f), Dict(x => Π))
-            if abs(ρ - 1) > 1e-5
+            f = factor(p / q)
+            print(f, '\n')
+            if !iszero(poly(f) - p / q)
                 outcome = false
             else
                 k += 1
@@ -100,7 +95,7 @@ end
 
 @testset "arith" begin
     @test test_eq(x, (p,q)->(p+q)-p-q, "add")
-    @test test_eq(x, (p,q)->p-(p/q)*q-(p%q), "mul")
+    @test test_eq(x, (p,q)->p-(p÷q)*q-(p%q), "mul")
     @test test_eq(x, (p,q)->p % gcd(p,q)+q % gcd(p,q), "gcd"; max_deg=5)
     @test test_deriv(x)
     @test test_factor(x)

@@ -1,30 +1,34 @@
 module SymPoly
 
-using Symbolics, SymbolicUtils
+using Reexport
+
+using MultivariatePolynomials
+using DynamicPolynomials
+
+using SymbolicUtils
 using SymbolicUtils: istree, operation, arguments
-using Symbolics: value, get_variables, solve_for, derivative
+using Symbolics: value, get_variables, expand_derivatives
 using SymbolicUtils.Rewriters
-using SymbolicUtils.Code
+# using SymbolicUtils.Code
 
-include("poly.jl")
+include("symbolics.jl")
 
-export Poly, extract_coef, gen_poly, degree, terms, var, leading, cont, prim
-export poly, polyas, sym, update_order
+export poly, sym
 
-include("arith.jl")
+include("wrapper.jl")
 
-export divide_poly, derivative, integrate, rationalize, to_monic, from_monic, integer_poly
+export wrap, unwrap, var, leading, cont, prim
+export deg, derivative
+export rationalize, unrationalize
+export gcd_extended
 
 include("roots.jl")
 
 export solve_newton, find_roots
 
-include("factors.jl")
+include("factorization.jl")
 
-export FactoredPoly, factors, factor_schubert_kronecker, decompose, recompose, factor
-
-include("fractions.jl")
-
-export FactoredFraction, expand_frac
+export FactoredPoly, factors, factor_schubert_kronecker
+export decompose, factor, expand_frac, power, frac
 
 end # module
