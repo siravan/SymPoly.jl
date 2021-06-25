@@ -13,7 +13,8 @@ function generate_rand_poly(x; min_deg=0, max_deg=5, sparcity=0.5)
                 p += x^i * s * r * rand(0:10)//rand(1:5)
             end
         end
-        !iszero(p) && return p
+        !isequal(p, 0) && return p
+        return p
     end
 end
 

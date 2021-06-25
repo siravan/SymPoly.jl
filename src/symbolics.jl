@@ -4,7 +4,12 @@
 function poly(eq, v::Pair)
     α, β = value(first(v)), last(v)
     terms = collect_powers(eq, α)
-    sum([val*β^k for (k,val) in terms])
+
+    if !all(isone, denominator.(collect(keys(terms))))
+        error("fractional power not supported")
+    end
+
+    sum([val*β^numerator(k) for (k,val) in terms]; init=0)
 end
 
 function poly(eq, β)
@@ -23,7 +28,7 @@ poly(eq) = poly(eq, 𝑦)
 
 function sym(p::AbstractPolynomial, v::Pair)
     β, α = first(v), value(last(v))
-    sum([α^maxdegree(t,β)*c for (t,c) in zip(terms(p), coefficients(p))])
+    sum([α^maxdegree(t,β)*c for (t,c) in zip(terms(p), coefficients(p))]; init=0)
 end
 
 sym(p::AbstractPolynomial, α) = sym(p, var(p) => α)

@@ -45,6 +45,7 @@ function Base.show(io::IO, f::FactoredPoly)
             i > 1 && print(io, " + ")
             i += 1
             p, k = first(w), last(w)
+
             if p isa AbstractPolynomial
                 c, q = integer_poly(p)
                 if isone(c)
@@ -52,7 +53,7 @@ function Base.show(io::IO, f::FactoredPoly)
                 else
                     print(io, c, " * (", q, ")")
                 end
-            else
+            elseif p isa RationalPoly
                 cn, n = integer_poly(numerator(p))
                 cd, d = integer_poly(denominator(p))
                 c = cn ÷ cd
@@ -66,6 +67,8 @@ function Base.show(io::IO, f::FactoredPoly)
                 if k != 1
                     print(io, "^", k)
                 end
+            else
+                print(io, p)
             end
         end
     else
@@ -80,6 +83,22 @@ function Base.show(io::IO, f::FactoredPoly)
             end
         end
     end
+end
+
+function sym(f::FactoredPoly, x)
+    h = FactoredPoly(f.rational)
+    for w in factors(f)
+        v, k = first(w), last(w)
+        if v isa AbstractPolynomial
+            add_factor!(h, sym(v, 𝑦 => x), k)
+        elseif v isa RationalPoly
+            cn, n = integer_poly(numerator(v))
+            cd, d = integer_poly(denominator(v))
+            c = cn ÷ cd
+            add_factor!(h, sym(c*n, 𝑦 => x) / sym(d, 𝑦 => x)^k, 1)
+        end
+    end
+    h
 end
 
 """
@@ -135,6 +154,8 @@ function decompose(p::AbstractPolynomial)
 
     return unrationalize(f)
 end
+
+decompose(eq) = implicit_process(decompose, eq)
 
 ##################### Helper functions for Factorization #####################
 
@@ -298,6 +319,8 @@ function Primes.factor(p::AbstractPolynomial)
     return unrationalize(f)
 end
 
+Primes.factor(eq) = implicit_process(factor, eq)
+
 ##############################################################################
 
 """
@@ -331,3 +354,6 @@ function Primes.factor(r::RationalPoly)
 
     f
 end
+
+Primes.factor(p::AbstractPolynomial, q::AbstractPolynomial) = factor(p / q)
+Primes.factor(p, q) = implicit_process(factor, p, q)

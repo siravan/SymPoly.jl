@@ -106,11 +106,15 @@ function rationalize(p::AbstractPolynomial)
     polynomial(convert.(Rational{BigInt}, coefficients(p)), terms(p))
 end
 
+rationalize(p) = implicit_process(rationalize, p)
+
 function unrationalize(p::AbstractPolynomial)
     t = terms(p)
     c = map(x -> x isa Rational && denominator(x)==1 ? numerator(x) : x, coefficients(p))
     polynomial(c, t)
 end
+
+unrationalize(p) = implicit_process(unrationalize, p)
 
 function gcd_extended(u::AbstractPolynomial, v::AbstractPolynomial)
     u = wrap(rationalize(u))
@@ -153,21 +157,68 @@ Base.gcdx(u::Wrapper, v::AbstractPolynomial) = wrap(gcd_extended(u.p, v), u.x)
 Base.gcdx(u::Wrapper, v) = wrap(gcd_extended(u.p, v), u.x)
 Base.gcdx(u, v::Wrapper) = wrap(gcd_extended(u, v.p), v.x)
 
-##############################################################################
+Base.gcdx(u, v) = implicit_process(gcdx, u, v)
 
-leading(p::AbstractPolynomial) = leadingcoefficient(p)
-cont(p::AbstractPolynomial) = gcd(coefficients(p)...) * sign(leading(p))
-prim(p::AbstractPolynomial) = p / cont(p)
+##############################################################################
 
 function var(p::AbstractPolynomial)
     vars = variables(p)
     if length(vars) == 1
         return vars[1]
+    elseif length(vars) == 0
+        return nothing
     else
         error("Polynomial should have only one variable")
     end
 end
 
+function var(p)
+    vars = get_variables(p)
+    if length(vars) == 1
+        return vars[1]
+    elseif length(vars) == 0
+        return nothing
+    else
+        error("Polynomial should have only one variable")
+    end
+end
+
+leading(p::AbstractPolynomial) = leadingcoefficient(p)
+cont(p::AbstractPolynomial) = gcd(coefficients(p)...) * sign(leading(p))
+prim(p::AbstractPolynomial) = p / cont(p)
+
+leading(p) = implicit_process(leading, p)
+cont(p) = implicit_process(cont, p)
+prim(p) = implicit_process(prim, p)
+
 derivative(p::AbstractPolynomial) = differentiate(p, var(p))
 deg(p::AbstractPolynomial, x) = maxdegree(p, x)
 deg(p::AbstractPolynomial) = maxdegree(p, var(p))
+
+derivative(p) = implicit_process(derivative, p)
+deg(p) = implicit_process(deg, p)
+
+##############################################################################
+
+function implicit_process(fun, eq)
+    x = var(eq)
+    x == nothing && return fun(eq₁ * one(𝑦))
+    p = poly(eq, x => 𝑦)
+    q = fun(p)
+
+    if q isa AbstractPolynomial
+        return sym(q, 𝑦 => x)
+    elseif q isa RationalPoly
+        return sym(numerator(q), 𝑦 => x) / sym(denominator(q), 𝑦 => x)
+    else
+        return q
+    end
+end
+
+function implicit_process(fun, eq₁, eq₂)
+    x₁ = var(eq₁)
+    x₂ = var(eq₂)
+    p = (x₁ == nothing ? eq₁ * one(𝑦) : poly(eq₁, x₁ => 𝑦))
+    q = (x₂ == nothing ? eq₂ * one(𝑦) : poly(eq₂, x₂ => 𝑦))
+    sym(fun(p, q), x₁)
+end

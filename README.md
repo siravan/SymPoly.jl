@@ -99,13 +99,13 @@ julia> r, s = find_roots(p, x)
 
 ### Polynomial Factorization
 
-[Polynomial factorization](https://en.wikipedia.org/wiki/Factorization_of_polynomials) is a very important operation and is required for symbolic integration, among other applications. From this point on, we are limited to polynomials with constant coefficients. Specially, we work with rational polynomials, whose coefficients are of type `Rational{BigInt}`. We can use the helper function `rationalize(p::AbstractPolynomial)` to convert a polynomial to a rational one. Currently, three factorization algorithms are provided:
+[Polynomial factorization](https://en.wikipedia.org/wiki/Factorization_of_polynomials) is a very important operation and is required for symbolic integration, among other applications. From this point on, we are limited to polynomials with constant coefficients. Specially, we work with rational polynomials, whose coefficients are of type `Rational{BigInt}`. We can use the helper function `rationalize(p)` to convert a polynomial `p` to a rational one. In functions below, `p` is either an `AbstractPolynomial` or a Symbolic expression. Currently, three factorization algorithms are provided:
 
-1. `factor_schubert_kronecker(p::AbstractPolynomial)`, which as its name implies uses the Schubert-Kronecker algorithm. Note that this algorithm is based on old ideas (Friedrich Theodor von Schubert died in 1825 and Leopold Kronecker died in 1891) and is not efficient. However, it is usable for low-degree polynomials.
+1. `factor_schubert_kronecker(p)`, which as its name implies uses the Schubert-Kronecker algorithm. Note that this algorithm is based on old ideas (Friedrich Theodor von Schubert died in 1825 and Leopold Kronecker died in 1891) and is not efficient. However, it is usable for low-degree polynomials.
 
-2. `decompose(p::AbstractPolynomial)` that uses the [Yun's algorithm](https://en.wikipedia.org/wiki/Square-free_polynomial) to decompose a polynomial into a list of co-prime and square-free factors. This is a fast algorithm but the decomposition is incomplete. For some applications, such as simplifying rational expressions, this is all that is needed. In other occasions, it can serve as the first step in a completet factorization (see below).
+2. `decompose(p)` that uses the [Yun's algorithm](https://en.wikipedia.org/wiki/Square-free_polynomial) to decompose a polynomial into a list of co-prime and square-free factors. This is a fast algorithm but the decomposition is incomplete. For some applications, such as simplifying rational expressions, this is all that is needed. In other occasions, it can serve as the first step in a completet factorization (see below).
 
-3. `factor(p::AbstractPolynomial)` is the main factorization entry point and currently uses a combination of square-free decomposition (first step) and the Schubert-Kronecker algorithm (second-step) to factor a polynomial. The plan is to switch to an efficient *Cantor–Zassenhaus algorithm* for the second step.
+3. `factor(p)` is the main factorization entry point and currently uses a combination of square-free decomposition (first step) and the Schubert-Kronecker algorithm (second-step) to factor a polynomial. The plan is to switch to an efficient *Cantor–Zassenhaus algorithm* for the second step.
 
 All three functions returns a value of type `FactoredPoly`, which is a list of `factor => power` pairs. We can access the factors and powers with the help of `factors`, `power`, `poly`, and the overloaded index operator (see below). Let's look at an example.
 
@@ -139,7 +139,7 @@ x⁵ + 10x⁴ + 26x³ - 75x - 250
 
 [Partial Fraction Decomposition](https://en.wikipedia.org/wiki/Partial_fraction_decomposition) is the conversion of a fraction, where both the numerator and denominator are polynomials, to a sum of simpler fractions. Partial fraction decomposition has many applications, including in symbolic integration.
 
-**SymPoly** uses the Hermite's method based on the square-free decomposition of the denominator to perform partial fraction decomposition. Let `p` be the numerator and `q` the denominator, where both are polynomials on the same variable. We can calculate the partial fraction decomposition of `p / q` by using `factor(p / q)`. For example,
+**SymPoly** uses the Hermite's method based on the square-free decomposition of the denominator to perform partial fraction decomposition. Let `p` be the numerator and `q` the denominator, where both are polynomials on the same variable. We can calculate the partial fraction decomposition of `p / q` by using `factor(p / q)` or `factor(p, q)`. For example,
 
 ```julia
 julia> p = x^4 + 6x^3 + 7x^2 +6x + 4
@@ -173,3 +173,19 @@ true
 ```
 
 While `factor(RationalPoly)` returns a `FactoredPoly` as the factorization functions, the interpretation of the results is different. First, the factors are additive not multiplicative. Second, the power applies only to the denominator. For example, `(-x² + 2x + 2) / (x² + x + 1) => 2` above means `(-x² + 2x + 2) / (x² + x + 1)^2`.
+
+If `p` and `q` are Symbolics expressions, only `factor(p, q)` form is valid:
+
+```julia
+julia> @syms 𝑥
+(𝑥,)
+
+julia> p = 𝑥^2 - 3𝑥 - 1
+𝑥^2 - 1 - (3𝑥)
+
+julia> q = (𝑥-1)^2 * (𝑥-2)
+(𝑥 - 2)*((𝑥 - 1)^2)
+
+julia> factor(p, q)
+(-3//1)*((𝑥 - 2)^-1) + ((𝑥 - 1)^-2)*((4//1)*𝑥 - (1//1))
+```
