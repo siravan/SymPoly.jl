@@ -1,7 +1,7 @@
 name = "SymPoly"
 uuid = "a55700a0-4576-423d-b8b7-d0f96944b1b5"
 authors = ["Shahriar Iravanian <siravan@svtsim.com>"]
-version = "0.2.1"
+version = "0.2.2"
 
 [deps]
 DynamicPolynomials = "7c1d4256-1411-5781-91ec-d7bc3513ac07"

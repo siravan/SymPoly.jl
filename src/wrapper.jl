@@ -210,6 +210,8 @@ function implicit_process(fun, eq)
         return sym(q, 𝑦 => x)
     elseif q isa RationalPoly
         return sym(numerator(q), 𝑦 => x) / sym(denominator(q), 𝑦 => x)
+    elseif q isa FactoredPoly
+        return sym(q, x)
     else
         return q
     end
