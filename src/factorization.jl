@@ -18,6 +18,11 @@ function add_factor!(f::FactoredPoly, p, power::Int=1)
     push!(f.factors, p => power)
 end
 
+function combine!(f::FactoredPoly, g::FactoredPoly)
+    f.rational != g.rational && error("cannot combine incompatible FactoredPolys")
+    append!(f.factors, g.factors)
+end
+
 Base.getindex(f::FactoredPoly, k::Integer) = first(f.factors[k])
 power(f::FactoredPoly, k::Integer) = last(f.factors[k])
 
@@ -233,6 +238,8 @@ function from_monic(p::AbstractPolynomial, c)
     n = deg(p)
     sum([p[i]*p.x^i*(1//c^(n-1-i)) for i = 0:n])
 end
+
+from_monic(p, c) = p
 
 ########################## Main factorization algorithms #####################
 

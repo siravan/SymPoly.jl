@@ -185,7 +185,11 @@ end
 
 leading(p::AbstractPolynomial) = leadingcoefficient(p)
 cont(p::AbstractPolynomial) = gcd(coefficients(p)...) * sign(leading(p))
-prim(p::AbstractPolynomial) = p / cont(p)
+prim(p::AbstractPolynomial) = polynomial(coefficients(p) .÷ cont(p), terms(p))
+
+leading(p::AbstractTerm) = leadingcoefficient(p)
+cont(p::AbstractTerm) = gcd(coefficients(p)...) * sign(leading(p))
+prim(p::AbstractTerm) = p ÷ cont(p)
 
 leading(p) = implicit_process(leading, p)
 cont(p) = implicit_process(cont, p)
@@ -202,7 +206,7 @@ deg(p) = implicit_process(deg, p)
 
 function implicit_process(fun, eq)
     x = var(eq)
-    x == nothing && return fun(eq₁ * one(𝑦))
+    x == nothing && return fun(eq * one(𝑦))
     p = poly(eq, x => 𝑦)
     q = fun(p)
 

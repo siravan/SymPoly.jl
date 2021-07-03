@@ -1,4 +1,4 @@
-module SymPoly
+# module SymPoly
 
 using Reexport
 
@@ -31,4 +31,4 @@ include("factorization.jl")
 export FactoredPoly, factors, factor_schubert_kronecker
 export decompose, factor, expand_frac, power, frac
 
-end # module
+# end # module
