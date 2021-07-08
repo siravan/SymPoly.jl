@@ -15,6 +15,7 @@ include("symbolics.jl")
 
 export poly, sym
 
+include("factoredpoly.jl")
 include("wrapper.jl")
 
 export wrap, unwrap, var, leading, cont, prim
@@ -30,5 +31,8 @@ include("factorization.jl")
 
 export FactoredPoly, factors, factor_schubert_kronecker
 export decompose, factor, expand_frac, power, frac
+
+include("modular.jl")
+include("roundabout.jl")
 
 # end # module

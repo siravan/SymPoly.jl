@@ -1,125 +1,3 @@
-using Primes
-
-struct FactoredPoly
-    rational::Bool
-    factors::Array{Pair{Any,Int}}
-
-    FactoredPoly(rational::Bool=false) = new(rational, Array{Pair{Any,Int}}[])
-    FactoredPoly(x) = new(false, [x => 1])
-end
-
-factors(f::FactoredPoly) = f.factors
-
-function add_factor!(f::FactoredPoly, w::Wrapper, power::Int=1)
-    push!(f.factors, w.p => power)
-end
-
-function add_factor!(f::FactoredPoly, p, power::Int=1)
-    push!(f.factors, p => power)
-end
-
-function combine!(f::FactoredPoly, g::FactoredPoly)
-    f.rational != g.rational && error("cannot combine incompatible FactoredPolys")
-    append!(f.factors, g.factors)
-end
-
-Base.getindex(f::FactoredPoly, k::Integer) = first(f.factors[k])
-power(f::FactoredPoly, k::Integer) = last(f.factors[k])
-
-function poly(f::FactoredPoly)
-    if f.rational
-        l = []
-        for w in factors(f)
-            p, k = first(w), last(w)
-            if p isa AbstractPolynomial
-                push!(l, p)
-            else
-                push!(l, numerator(p) / rationalize(denominator(p))^k)
-            end
-        end
-        return length(l)==0 ? 0 : sum(l)
-    else
-        return prod(map(v -> first(v)^last(v), factors(f)); init=1)
-    end
-end
-
-function Base.show(io::IO, f::FactoredPoly)
-    i = 1
-    if f.rational
-        for w in factors(f)
-            i > 1 && print(io, " + ")
-            i += 1
-            p, k = first(w), last(w)
-
-            if p isa AbstractPolynomial
-                c, q = integer_poly(p)
-                if isone(c)
-                    print(io, q)
-                else
-                    print(io, c, " * (", q, ")")
-                end
-            elseif p isa RationalPoly
-                cn, n = integer_poly(numerator(p))
-                cd, d = integer_poly(denominator(p))
-                c = cn ÷ cd
-
-                if !isone(c)
-                    print(io, c, " * ")
-                end
-
-                print(io, '(', n, ") / (", d, ")")
-
-                if k != 1
-                    print(io, "^", k)
-                end
-            else
-                print(io, p)
-            end
-        end
-    else
-        for w in factors(f)
-            p, k = first(w), last(w)
-            i > 1 && print(io, " * ")
-            i += 1
-            if k == 1
-                print(io, '(', p, ")")
-            else
-                print(io, '(', p, ")^", k)
-            end
-        end
-    end
-end
-
-function sym(f::FactoredPoly, x)
-    h = FactoredPoly(f.rational)
-    for w in factors(f)
-        v, k = first(w), last(w)
-        if v isa AbstractPolynomial
-            add_factor!(h, sym(v, 𝑦 => x), k)
-        elseif v isa RationalPoly
-            cn, n = integer_poly(numerator(v))
-            cd, d = integer_poly(denominator(v))
-            c = cn ÷ cd
-            add_factor!(h, sym(c*n, 𝑦 => x) / sym(d, 𝑦 => x)^k, 1)
-        end
-    end
-    h
-end
-
-"""
-    convert rational coefficients with a denominator of 1 to integer
-"""
-function unrationalize(f::FactoredPoly)
-    h = FactoredPoly()
-    for w in factors(f)
-        p, k = first(w), last(w)
-        add_factor!(h, unrationalize(p), k)
-    end
-    h
-end
-
-##############################################################################
-
 """
     square-free decomposition of p
     Yun's algorithm
@@ -160,18 +38,18 @@ function decompose(p::AbstractPolynomial)
     return unrationalize(f)
 end
 
-decompose(eq) = implicit_process(decompose, eq)
+decompose(eq) = wrap(decompose, eq)
 
 ##################### Helper functions for Factorization #####################
 
-function integer_poly(p::AbstractPolynomial)
-    p = rationalize(p)
-    c = coefficients(p)
-    l = lcm(denominator.(c)...)
-    d = map(x -> BigInt(numerator(l*x)), c)
-    return 1//l*one(p), polynomial(d, terms(p))
-    # return 1//l*one(p), p*l
-end
+# function integer_poly(p::AbstractPolynomial)
+#     p = rationalize(p)
+#     c = coefficients(p)
+#     l = lcm(denominator.(c)...)
+#     d = map(x -> BigInt(numerator(l*x)), c)
+#     return 1//l*one(p), polynomial(d, terms(p))
+#     # return 1//l*one(p), p*l
+# end
 
 # Lagrange interpolation algorithm for rational polynomials
 function interp_poly(x, xs, ys)
@@ -226,21 +104,6 @@ function assemble_factors(f, r, l)
     unrationalize(f)
 end
 
-function to_monic(p::AbstractPolynomial)
-    p = wrap(rationalize(p))
-    c = leading(p)
-    n = deg(p)
-    sum([p[i]*p.x^i*c^(n-1-i) for i = 0:n]), c
-end
-
-function from_monic(p::AbstractPolynomial, c)
-    p = wrap(rationalize(p))
-    n = deg(p)
-    sum([p[i]*p.x^i*(1//c^(n-1-i)) for i = 0:n])
-end
-
-from_monic(p, c) = p
-
 ########################## Main factorization algorithms #####################
 
 """
@@ -249,8 +112,9 @@ from_monic(p, c) = p
     based on Algorithm 6.1 in "Computer Algebra, Concepts and Techniques" by Edmund A. Lamangna
 """
 function factor_schubert_kronecker(p::AbstractPolynomial)
-    l, p = integer_poly(rationalize(p))
+    p = rationalize(p)
     r = copy(p)
+    l, p = integer_poly(p)
     x = var(p)
     f = FactoredPoly()
     A = Int[]
@@ -320,13 +184,13 @@ function Primes.factor(p::AbstractPolynomial)
     !iszero(r) && @error "incorrect factorization"
 
     if !isone(q)
-        add_factor!(f, q, 0)
+        add_factor!(f, q, 1)
     end
 
     return unrationalize(f)
 end
 
-Primes.factor(eq) = implicit_process(factor, eq)
+Primes.factor(eq) = wrap(factor, eq)
 
 ##############################################################################
 
@@ -363,4 +227,4 @@ function Primes.factor(r::RationalPoly)
 end
 
 Primes.factor(p::AbstractPolynomial, q::AbstractPolynomial) = factor(p / q)
-Primes.factor(p, q) = implicit_process(factor, p, q)
+Primes.factor(p, q) = wrap(factor, p, q)
