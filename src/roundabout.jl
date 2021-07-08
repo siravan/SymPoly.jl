@@ -16,7 +16,7 @@ function factor_distinct_degree(p::Polynomial{true, ℤₚ{n}}) where n
 
         if !isone(g)
             add_factor!(f, g, d)
-            p ÷= g
+            p = remove_factor(p, g)
         end
         d += 1
     end
@@ -66,9 +66,8 @@ function factor_equal_degree(f::FactoredPoly; maxiter=100)
         p, d = first(w), last(w)
         if deg(p) == d
             add_factor!(h, p, 1)
-        else
-            # combine!(h, factor_equal_degree(p, d; maxiter=maxiter))
-            combine!(h, factor_equal_degree2(p, d; maxiter=maxiter))
+        else            
+            combine!(h, factor_equal_degree(p, d; maxiter=maxiter))
         end
     end
     h
@@ -225,7 +224,7 @@ function modpow(p::AbstractPolynomialLike, k::Integer, q::AbstractPolynomialLike
     r = one(p)
     while k > 0
         if isodd(k)
-            r = rem(r * x, q)
+            r = rem(r*x, q)
         end
         x = rem(x*x, q)
         k >>= 1

@@ -1,4 +1,4 @@
-# module SymPoly
+module SymPoly
 
 using Reexport
 
@@ -35,4 +35,4 @@ export decompose, factor, expand_frac, power, frac
 include("modular.jl")
 include("roundabout.jl")
 
-# end # module
+end # module
