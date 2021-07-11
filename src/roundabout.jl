@@ -16,7 +16,7 @@ function factor_distinct_degree(p::Polynomial{true, ℤₚ{n}}) where n
 
         if !isone(g)
             add_factor!(f, g, d)
-            p = remove_factor(p, g)
+            p ÷= g
         end
         d += 1
     end
@@ -26,7 +26,7 @@ end
 
 @polyvar 𝑢
 
-function factor_equal_degree(p::Polynomial{true, ℤₚ{n}}, d, i₀=1; maxiter=100) where n
+function factor_equal_degree(p::Polynomial{true, ℤₚ{n}}, d, i₀=0) where n
     f = FactoredPoly()
     p₀ = p
     # x = var(p)
@@ -34,7 +34,8 @@ function factor_equal_degree(p::Polynomial{true, ℤₚ{n}}, d, i₀=1; maxiter=
     e = (n^d - 1) ÷ 2
 
     for i = i₀:n
-        a = modular(n, a+i)
+        a = modular(n, x+i)
+        # a = modular(n, ((i-1)÷n)*x^2 + x + ((i-1)%n))
         q = modpow(a, e, p₀) - one(p₀)
         g = gcd(p, q)
         # qᵤ = modular(n, 𝑢^e - 1)
@@ -50,24 +51,23 @@ function factor_equal_degree(p::Polynomial{true, ℤₚ{n}}, d, i₀=1; maxiter=
                 f₂ = factor_equal_degree(g, d, i+1)
                 combine!(f, f₂)
             end
-            p = remove_factor(p, g)
+            p ÷= g
         end
 
         isone(p) && return f
     end
-    add_factor!(f, p, 1)
     return f
 end
 
-function factor_equal_degree(f::FactoredPoly; maxiter=100)
+function factor_equal_degree(f::FactoredPoly)
     h = FactoredPoly()
 
     for w in factors(f)
         p, d = first(w), last(w)
         if deg(p) == d
             add_factor!(h, p, 1)
-        else            
-            combine!(h, factor_equal_degree(p, d; maxiter=maxiter))
+        else
+            combine!(h, factor_equal_degree(p, d))
         end
     end
     h
@@ -85,7 +85,7 @@ function find_integer_factorization(p::AbstractPolynomial, f)
     fs = []
 
     d = 1
-    while length(S) < m && d < 3
+    while length(S) < m && d <= deg(p)÷2
         for a in Iterators.product([1:m for i=1:d]...)
             if length(unique(a)) == d
                 if !any(i ∈ S for i in a)
@@ -107,8 +107,7 @@ function find_integer_factorization(p::AbstractPolynomial, f)
     fs
 end
 
-function factor_monic(p::AbstractPolynomial, n)
-    # n = nextprime(landau_mignotte(p)*2)
+function factor_modular(p::AbstractPolynomial, n)
     P = modular(n, p)
     f = factor_distinct_degree(P)
     f = factor_equal_degree(f)
@@ -118,10 +117,9 @@ end
 # p should be integer and monic
 function factor_roundabout(p::AbstractPolynomial, n)
     !isprime(n) && error("$n is not a prime!")
-    λ = landau_mignotte(p)
-    @info "λ = $λ"
     lc = leading(p)
     p, undo = standard_form(p)
+    λ = landau_mignotte(p)
     x = var(p)
 
     f = FactoredPoly()
@@ -131,13 +129,9 @@ function factor_roundabout(p::AbstractPolynomial, n)
         v, k = first(w), last(w)
 
         if deg(v, x) > 0
-            f₁ = factor_monic(v, n)
-            println("f₁: ", f₁)
-            f₂ = lift(v, f₁, n, λ)
-            # f₂ = f₁
-            println("f₂: ", f₂)
+            f₁ = factor_modular(v, n)
+            f₂ = lift(v, f₁, n, 2λ)
             f₃ = find_integer_factorization(v, f₂)
-            println("f₃: ", f₃)
 
             for u in f₃
                 if deg(u) > 0
@@ -167,6 +161,54 @@ function factor_roundabout(eq, n)
     unwrap(factor_roundabout(p, n), v)
 end
 
+function factor_roundabout(p::AbstractPolynomial; n=3, max_prime=50)
+    n >= max_prime && return nothing
+    n = nextprime(n)
+
+    f₁ = factor_roundabout(p, n)
+
+    i = 1
+    while length(f₁) == 1 && i < 4
+        n = nextprime(n+1)
+        f₁ = factor_roundabout(p, n)
+        i += 1
+    end
+
+    length(f₁) == 1 && return f₁
+
+    f₂ = FactoredPoly()
+    k = 1
+
+    for w₁ in factors(f₁)
+        v₁, k₁ = first(w₁), last(w₁)
+        if deg(v₁) == 0
+            k *= v₁^k₁
+        elseif deg(v₁) == 1
+            k *= cont(v₁)^k₁
+            add_factor!(f₂, prim(v₁), k₁)
+        else
+            f₃ = factor_roundabout(v₁; n=n+1, max_prime=max_prime)
+            if f₃ != nothing
+                for w₃ in factors(f₃)
+                    v₃, k₃ = first(w₃), last(w₃)
+                    if deg(v₃) == 0
+                        k *= v₃^(k₁*k₃)
+                    else
+                        add_factor!(f₂, v₃, k₁*k₃)
+                    end
+                end
+            end
+        end
+    end
+
+    if !isone(k)
+        add_factor!(f₂, k, 1)
+    end
+
+    return f₂
+end
+
+factor_roundabout(eq) = wrap(factor_roundabout, eq)
 
 ##############################################################################
 
@@ -213,7 +255,8 @@ function lift(p::AbstractPolynomial, f, m, λ)
         s, t = f[1], last(integer_poly(prod(f[i] for i=2:nf)))
         h₁ = lift(p, s, t, m, λ)
         s = h₁[1]
-        h₂ = lift(remove_factor(p,s), f[2:nf], m, λ)
+        # h₂ = lift(remove_factor(p,s), f[2:nf], m, λ)
+        h₂ = lift(t, f[2:nf], m, λ)
         add_factor!(h₂, s)
         return h₂
     end

@@ -39,7 +39,7 @@ wrap(fun, p::AbstractPolynomialLike, q::AbstractPolynomialLike) = fun(p, q)
 
 function prewrap(eq)
     x = var(eq)
-    x == nothing && return fun(eq * one(𝑦))
+    x == nothing && return eq * one(𝑦), 𝑦 => x
     p = poly(eq, x => 𝑦)
     p, 𝑦 => x
 end
@@ -126,6 +126,7 @@ leading(p::AbstractPolynomialLike) = leadingcoefficient(p)
 cont(p::AbstractPolynomialLike) = gcd(coefficients(p)...) * sign(leading(p))
 prim(p::AbstractPolynomialLike) = polynomial(coefficients(p) .÷ cont(p), terms(p))
 derivative(p::AbstractPolynomialLike) = differentiate(p, var(p))
+deg(p::Number) = 0
 deg(p::AbstractPolynomialLike, x) = maxdegree(p, x)
 deg(p::AbstractPolynomialLike) = maxdegree(p, var(p))
 coef(p::AbstractPolynomialLike) = lcm(denominator.(coefficients(p))...)
@@ -149,7 +150,11 @@ end
 
 function integer_poly(p::Polynomial{true,T}) where T<:Rational
     l = coef(p)
-    1//l*one(p), polynomial(Int.(numerator.(coefficients(l*p))), terms(p))
+    1//l, polynomial(Int.(numerator.(coefficients(l*p))), terms(p))
+end
+
+function integer_poly(p::AbstractPolynomialLike)
+    1, polynomial(round.(Int, coefficients(p)), terms(p))
 end
 
 integer_poly(p::Polynomial{true,T}) where T<:Integer = (1, p)
@@ -177,7 +182,7 @@ function from_monic(p::Polynomial{true,T}, c) where T<:Integer
     last(integer_poly(q))
 end
 
-from_monic(p, c) = p
+from_monic(p, c) = from_monic(polynomial(p), c)
 
 ###############################################################################
 

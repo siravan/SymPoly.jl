@@ -20,7 +20,7 @@ function test_deriv(x; n=10, min_deg=1, max_deg=6, sparcity=0.5)
     outcome
 end
 
-function test_factor(x)
+function test_factor(x; method=:schubert_kronecker)
     ps = Any[
         x^3 + 14x^2 + 56x + 64,
         18x^3 - 57x^2 + 53x - 12,
@@ -74,7 +74,7 @@ function test_factor(x)
     for p = ps
         try
             printstyled(p, '\n'; color=:green)
-            f = factor(p)
+            f = factor(p; method=method)
             outcome = outcome && (f != nothing)
             printstyled(poly(f), '\n'; color=:red)
             println(f)
@@ -123,6 +123,11 @@ end
     @test test_eq(x, (p,q)->p-(p÷q)*q-(p%q), "mul")
     @test test_eq(x, (p,q)->p % gcd(p,q)+q % gcd(p,q), "gcd"; max_deg=5)
     @test test_deriv(x)
-    @test test_factor(x)
+    println("********* Schubert-Kronecker ************")
+    @test test_factor(x; method=:schubert_kronecker)
+    println("********** Roundabout *******************")
+    @test test_factor(x; method=:roundabout)
+    println("********* Roots Combinations*************")
+    @test test_factor(x; method=:roots_comb)
     @test test_fraction(x)
 end

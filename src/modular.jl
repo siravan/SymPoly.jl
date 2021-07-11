@@ -1,5 +1,3 @@
-using Primes
-
 # based on https://discourse.julialang.org/t/arithmetic-modulo-primes/23895/3
 
 struct ℤₚ{p} <: Number

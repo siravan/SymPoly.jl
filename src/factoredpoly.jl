@@ -1,5 +1,3 @@
-using Primes
-
 struct FactoredPoly
     rational::Bool
     factors::Array{Pair{Any,Int}}

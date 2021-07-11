@@ -111,7 +111,7 @@ end
 
     based on Algorithm 6.1 in "Computer Algebra, Concepts and Techniques" by Edmund A. Lamangna
 """
-function factor_schubert_kronecker(p::AbstractPolynomial)
+function factor_monic_sk(p::AbstractPolynomial)
     p = rationalize(p)
     r = copy(p)
     l, p = integer_poly(p)
@@ -160,7 +160,7 @@ function factor_schubert_kronecker(p::AbstractPolynomial)
     assemble_factors(f, r, l)
 end
 
-function Primes.factor(p::AbstractPolynomial)
+function factor_schubert_kronecker(p::AbstractPolynomial)
     _, pᵢ = integer_poly(p)
     pₘ, c = to_monic(pᵢ)
     x = var(p)
@@ -171,7 +171,7 @@ function Primes.factor(p::AbstractPolynomial)
     for w in factors(decompose(pₘ))
         v, k = first(w), last(w)
         if deg(v, x) > 0
-            for u in factors(factor_schubert_kronecker(v))
+            for u in factors(factor_monic_sk(v))
                 w₁ = prim(from_monic(first(u), c))
                 add_factor!(f, w₁, k)
                 p₁ = p₁ * w₁^k
@@ -190,7 +190,7 @@ function Primes.factor(p::AbstractPolynomial)
     return unrationalize(f)
 end
 
-Primes.factor(eq) = wrap(factor, eq)
+factor_schubert_kronecker(eq) = wrap(factor, eq)
 
 ##############################################################################
 
@@ -199,7 +199,7 @@ Primes.factor(eq) = wrap(factor, eq)
 
     based on part of Algorithm 7.1 in "Computer Algebra, Concepts and Techniques" by Edmund A. Lamangna
 """
-function Primes.factor(r::RationalPoly)
+function factor_rational(r::RationalPoly)
     p, q = numerator(r), denominator(r)
     !isequal(var(p), var(q)) && error("the numerator and denominator should have the same main variable")
 
@@ -226,5 +226,5 @@ function Primes.factor(r::RationalPoly)
     f
 end
 
-Primes.factor(p::AbstractPolynomial, q::AbstractPolynomial) = factor(p / q)
-Primes.factor(p, q) = wrap(factor, p, q)
+factor_rational(p::AbstractPolynomial, q::AbstractPolynomial) = factor(p / q)
+factor_rational(p, q) = wrap(factor, p, q)

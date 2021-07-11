@@ -37,8 +37,8 @@ function find_roots(p::AbstractPolynomial, x, n=-1; abstol=1e-8)
     zs = Complex[]
 
     while n > 0
-        z = solve_newton(p, x, Complex(rand(),rand()))
-        if z != nothing
+        z = solve_newton(p, x, exp(2π*im*rand()))
+        if z != nothing            
             if abs(imag(z)) < abstol
                 r = real(z)
                 push!(rs, r)

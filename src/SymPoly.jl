@@ -1,6 +1,5 @@
-module SymPoly
-
-using Reexport
+# module SymPoly
+using Primes
 
 using MultivariatePolynomials
 using DynamicPolynomials
@@ -35,4 +34,24 @@ export decompose, factor, expand_frac, power, frac
 include("modular.jl")
 include("roundabout.jl")
 
-end # module
+include("roots_comb.jl")
+
+
+#############################################################################
+
+function Primes.factor(p; method=:schubert_kronecker)
+    if method == :schubert_kronecker
+        return factor_schubert_kronecker(p)
+    elseif method == :roundabout
+        return factor_roundabout(p)
+    elseif method == :roots_comb
+        return factor_roots_comb(p)
+    else
+        error("underfined factorization method")
+    end
+end
+
+Primes.factor(p, q) = factor_rational(p, q)
+Primes.factor(r::RationalPoly) = factor_rational(r)
+
+# end # module
