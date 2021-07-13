@@ -94,17 +94,21 @@ function sym(f::FactoredPoly, r)
     h = FactoredPoly(f.rational)
     for w in factors(f)
         v, k = first(w), last(w)
-        if v isa AbstractPolynomial
+        if v isa AbstractPolynomialLike
             add_factor!(h, sym(v, r), k)
         elseif v isa RationalPoly
             cn, n = integer_poly(numerator(v))
             cd, d = integer_poly(denominator(v))
             c = cn ÷ cd
             add_factor!(h, sym(c*n, r) / sym(d, r)^k, 1)
+        else
+            add_factor!(h, v, k)
         end
     end
     h
 end
+
+SymbolicUtils.simplify(f::FactoredPoly) = prod(first(w)^last(w) for w in factors(f); init=1)
 
 """
     convert rational coefficients with a denominator of 1 to integer

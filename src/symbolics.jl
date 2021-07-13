@@ -26,13 +26,13 @@ end
 
 poly(eq) = poly(eq, 𝑦)
 
-function sym(p::AbstractPolynomial, v::Pair)
+function sym(p::AbstractPolynomialLike, v::Pair)
     β, α = first(v), value(last(v))
     sum([α^maxdegree(t,β)*c for (t,c) in zip(terms(p), coefficients(p))]; init=0)
 end
 
-sym(p::AbstractPolynomial, α) = sym(p, var(p) => α)
-sym(p::AbstractPolynomial) = sym(p, var(p) => 𝑥)
+sym(p::AbstractPolynomialLike, α) = sym(p, var(p) => α)
+sym(p::AbstractPolynomialLike) = sym(p, var(p) => 𝑥)
 
 ###############################################################################
 

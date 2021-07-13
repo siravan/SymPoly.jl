@@ -1,3 +1,5 @@
+using Random
+
 include("utils.jl")
 
 @syms 𝑥
@@ -116,9 +118,90 @@ function test_fraction(x; n=10)
     outcome
 end
 
+function test_factor_extended(x, n, d=5; method=:roots_comb, seed=0)
+    frags = [
+        (x, i) -> (x - i),
+        (x, i) -> (rand(2:11)*x - i),
+        (x, i) -> (x^i + rand(1:100)),
+        (x, i) -> (rand(1:20)*x^i + rand(1:100)),
+        (x, i) -> (x^i - 1),
+        (x, i) -> (x^(2^i) - i),
+        (x, i) -> (rand(2:11)*x^(2^i) + i),
+        (x, i) -> (x^2 + x + 1),
+        (x, i) -> (x + 1),
+        (x, i) -> (rand(1:20)*x + 1),
+        (x, i) -> (x^3 + 7x^2 + 13x + 1),
+        (x, i) -> (x^5 + x^4 + 11x^3 + 13x^2 + 5x + 1),
+        (x, i) -> (rand(2:20)*x^3 + 7x^2 + 13x + 1),
+        (x, i) -> (rand(2:20)*x^5 + x^4 + 11x^3 + 13x^2 + 5x + 1),
+        (x, i) -> (rand(2:20)*x^7 + 1),
+        (x, i) -> sum(rand(3:10)*x^j for j=1:rand(5:10)),
+    ]
+
+    if seed != 0
+        Random.seed!(seed)
+    end
+
+    m = length(frags)
+
+    for j = 1:n
+        println("-------------------------------------")
+        p = one(x)
+        n₁ = 0
+        for i=1:d
+            q = frags[rand(1:m)](x, i)
+            k = rand(1:2)
+            print('(', q, ")^", k)
+            if i < d
+                print(" * ")
+            else
+                println()
+            end
+            p *= q^k
+            n₁ += k
+        end
+
+        printstyled(p, "\n"; color=:blue)
+        f = factor(p; method=method)
+        printstyled(f, "\n"; color=:magenta)
+
+        n₂ = sum(last(v) for v in f.factors)
+
+        if p isa AbstractPolynomialLike
+            println("Δ = ", poly(f) - p)
+        else
+            println("Δ = ", expand(simplify(f) - p))
+        end
+
+        if n₂ < n₁
+            printstyled("possible incomplete factorization\n"; color=:yellow)
+        else
+            printstyled("OK!\n"; color=:green)
+        end
+    end
+    true
+end
+
+function swinnerton_dyer(x, n)
+    a = zeros(n)
+    r = 2
+    for i = 1:n
+        a[i] = sqrt(r)
+        r = nextprime(r+1)
+    end
+
+    p = one(x)
+    for i = 0:2^n-1
+        k = sum(isodd(i >> (j-1)) ? a[j] : -a[j] for j = 1:n)
+        p *= x + k
+    end
+
+    return last(integer_poly(p))
+end
+
 #############################################################################
 
-@testset "arith" begin
+function test_all()
     @test test_eq(x, (p,q)->(p+q)-p-q, "add")
     @test test_eq(x, (p,q)->p-(p÷q)*q-(p%q), "mul")
     @test test_eq(x, (p,q)->p % gcd(p,q)+q % gcd(p,q), "gcd"; max_deg=5)
@@ -129,5 +212,9 @@ end
     @test test_factor(x; method=:roundabout)
     println("********* Roots Combinations*************")
     @test test_factor(x; method=:roots_comb)
+    @test test_factor_extended(x, 50; method=:roots_comb)
+    @test test_factor_extended(𝑥, 50; method=:roots_comb)
     @test test_fraction(x)
 end
+
+@testset "arith" begin test_all() end

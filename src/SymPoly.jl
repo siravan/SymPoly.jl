@@ -1,4 +1,4 @@
-# module SymPoly
+module SymPoly
 using Primes
 
 using MultivariatePolynomials
@@ -39,7 +39,7 @@ include("roots_comb.jl")
 
 #############################################################################
 
-function Primes.factor(p; method=:schubert_kronecker)
+function Primes.factor(p; method=:roots_comb)
     if method == :schubert_kronecker
         return factor_schubert_kronecker(p)
     elseif method == :roundabout
@@ -54,4 +54,4 @@ end
 Primes.factor(p, q) = factor_rational(p, q)
 Primes.factor(r::RationalPoly) = factor_rational(r)
 
-# end # module
+end # module

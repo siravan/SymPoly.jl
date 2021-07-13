@@ -40,7 +40,7 @@ wrap(fun, p::AbstractPolynomialLike, q::AbstractPolynomialLike) = fun(p, q)
 function prewrap(eq)
     x = var(eq)
     x == nothing && return eq * one(𝑦), 𝑦 => x
-    p = poly(eq, x => 𝑦)
+    p = poly(expand(eq), x => 𝑦)
     p, 𝑦 => x
 end
 

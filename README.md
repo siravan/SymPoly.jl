@@ -99,22 +99,26 @@ julia> r, s = find_roots(p, x)
 
 ### Polynomial Factorization
 
-[Polynomial factorization](https://en.wikipedia.org/wiki/Factorization_of_polynomials) is a very important operation and is required for symbolic integration, among other applications. From this point on, we are limited to polynomials with constant coefficients. Specially, we work with rational polynomials, whose coefficients are of type `Rational{BigInt}`. We can use the helper function `rationalize(p)` to convert a polynomial `p` to a rational one. In functions below, `p` is either an `AbstractPolynomial` or a Symbolic expression. Currently, three factorization algorithms are provided:
+[Polynomial factorization](https://en.wikipedia.org/wiki/Factorization_of_polynomials) is a very important operation and is required for symbolic integration, among other applications. From this point on, we are limited to polynomials with constant coefficients (integer or rational coefficients). In functions below, `p` is either an `AbstractPolynomial` or a Symbolic expression. Two types of factorization algorithms are provided:
 
-1. `factor_schubert_kronecker(p)`, which as its name implies uses the Schubert-Kronecker algorithm. Note that this algorithm is based on old ideas (Friedrich Theodor von Schubert died in 1825 and Leopold Kronecker died in 1891) and is not efficient. However, it is usable for low-degree polynomials.
+1. `decompose(p)` that uses the [Yun's algorithm](https://en.wikipedia.org/wiki/Square-free_polynomial) to decompose a polynomial into a list of co-prime and square-free factors. This is a fast algorithm but the decomposition is incomplete. For some applications, such as simplifying rational expressions, this is all that is needed. In other occasions, it can serve as the first step in a completet factorization (see below).
 
-2. `decompose(p)` that uses the [Yun's algorithm](https://en.wikipedia.org/wiki/Square-free_polynomial) to decompose a polynomial into a list of co-prime and square-free factors. This is a fast algorithm but the decomposition is incomplete. For some applications, such as simplifying rational expressions, this is all that is needed. In other occasions, it can serve as the first step in a completet factorization (see below).
+2. `factor(p; method)`, which provided a complete factorization of `p`. Currently, three different factorization methods are implements:
 
-3. `factor(p)` is the main factorization entry point and currently uses a combination of square-free decomposition (first step) and the Schubert-Kronecker algorithm (second-step) to factor a polynomial. The plan is to switch to an efficient *Cantor–Zassenhaus algorithm* for the second step.
+  * `method=:schubert_kronecker`: as its name implies, this method uses the Schubert-Kronecker algorithm. Note that this algorithm is based on old ideas (Friedrich Theodor von Schubert died in 1825 and Leopold Kronecker died in 1891) and is not efficient and is only usable for low-degree polynomials. It is mainly included for historical reasons and as verification of other methods.
 
-All three functions returns a value of type `FactoredPoly`, which is a list of `factor => power` pairs. We can access the factors and powers with the help of `factors`, `power`, `poly`, and the overloaded index operator (see below). Let's look at an example.
+  * `method=:roundabout`: this method uses the *roundabout* by first converting the polynomial to one over a finite field (ℤₚ), then factoring over the finite field (**Zassenhaus algorithm**), and finally, converting the factorization over the finite field back to integers (**Hensel Lifting**).
+
+  * `method=:roots_comb` (*default*): this method finds the factors based on the combinatorial analysis of the real and complex roots of `p`. Currently, this algorithm is the fastest for for small and medium size (degree < 50) polynomials.
+
+The factorization functions returns a value of type `FactoredPoly`, which is a list of `factor => power` pairs. We can access the factors and powers with the help of `factors`, `power`, `poly`, and the overloaded index operator (see below). Let's look at an example.
 
 ```julia
 julia> p = (x-2) * (x+5)^2 * (x^2 + 2x + 5)
 x⁵ + 10x⁴ + 26x³ - 75x - 250
 
-julia> f = factor(p)
-FactoredPoly(Pair{Any, Int64}[x - 2 => 1, x² + 2x + 5 => 1, x + 5 => 2])
+julia> f = factor(p; method=:schubert_kronecker)
+(x - 2) * (x^2 + 2*x + 5) * (x + 5)^2
 
 julia> factors(f)
 3-element Vector{Pair{Any, Int64}}:
@@ -133,6 +137,16 @@ true
 
 julia> poly(f)
 x⁵ + 10x⁴ + 26x³ - 75x - 250
+```
+
+More complex examples:
+
+```julia
+julia> p = prod(i*x^5+x^3+x+1 for i=1:3)
+6x¹⁵ + 11x¹³ + 17x¹¹ + 11x¹⁰ + 13x⁹ + 12x⁸ + 9x⁷ + 15x⁶ + 9x⁵ + 6x⁴ + 4x³ + 3x² + 3x + 1
+
+julia> factor(p)
+(3*x^5 + x^3 + x + 1) * (2*x^5 + x^3 + x + 1) * (x^5 + x^3 + x + 1)
 ```
 
 ### Partial Fraction Decomposition
