@@ -1,7 +1,7 @@
 name = "SymPoly"
 uuid = "a55700a0-4576-423d-b8b7-d0f96944b1b5"
 authors = ["Shahriar Iravanian <siravan@svtsim.com>"]
-version = "0.3.0"
+version = "0.3.1"
 
 [deps]
 AbstractAlgebra = "c3fe647b-3220-5bb0-a1ea-a7954cac585d"

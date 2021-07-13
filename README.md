@@ -99,7 +99,7 @@ julia> r, s = find_roots(p, x)
 
 ### Polynomial Factorization
 
-[Polynomial factorization](https://en.wikipedia.org/wiki/Factorization_of_polynomials) is a very important operation and is required for symbolic integration, among other applications. From this point on, we are limited to polynomials with constant coefficients (integer or rational coefficients). In functions below, `p` is either an `AbstractPolynomial` or a Symbolic expression. Two types of factorization algorithms are provided:
+[Polynomial factorization](https://en.wikipedia.org/wiki/Factorization_of_polynomials) is a very important operation and is required for symbolic integration, among other applications. From this point on, we are limited to polynomials with constant coefficients (integer or rational coefficients in some cases). In functions below, `p` is either an `AbstractPolynomial` or a Symbolic expression. Two types of factorization algorithms are provided:
 
 1. `decompose(p)` that uses the [Yun's algorithm](https://en.wikipedia.org/wiki/Square-free_polynomial) to decompose a polynomial into a list of co-prime and square-free factors. This is a fast algorithm but the decomposition is incomplete. For some applications, such as simplifying rational expressions, this is all that is needed. In other occasions, it can serve as the first step in a completet factorization (see below).
 

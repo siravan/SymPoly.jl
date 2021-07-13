@@ -203,8 +203,8 @@ function factor_rational(r::RationalPoly)
     p, q = numerator(r), denominator(r)
     !isequal(var(p), var(q)) && error("the numerator and denominator should have the same main variable")
 
-    p = rationalize(p)
-    q = rationalize(q)
+    # p = rationalize(p)
+    # q = rationalize(q)
 
     f = FactoredPoly(true)
     p₀, p = divrem(p, q)

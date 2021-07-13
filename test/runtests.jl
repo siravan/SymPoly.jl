@@ -93,24 +93,21 @@ function test_fraction(x; n=10)
     outcome = true
 
     for i = 1:n
-        p = generate_rand_poly(x; min_deg=1, max_deg=6)
-
-        q = generate_rand_poly(x; min_deg=1, max_deg=2) *
-            generate_rand_poly(x; min_deg=1, max_deg=2) *
-            generate_rand_poly(x; min_deg=2, max_deg=3)
+        p = prod(rand(1:10)*x^3 + rand(0:10)*x + rand(-15:15) for i=1:3)
+        q = prod(rand(1:10)*x^2 + rand(0:10)*x + rand(-15:15) for i=1:3)
 
         printstyled("P/Q = ", p/q, '\n'; color=:green)
 
         try
-            f = factor(p / q)
+            f = factor(p, q)
             print(f, '\n')
-            if !iszero(poly(f) - p / q)
+            if ~isapprox(poly(f)(x => π), p(x => π) / q(x => π))
                 outcome = false
             else
                 k += 1
             end
-            f = factor(sym(p, x => 𝑥), sym(q, x => 𝑥))
-            printstyled(f, '\n'; color=:red)
+            # f = factor(sym(p, x => 𝑥), sym(q, x => 𝑥))
+            # printstyled(f, '\n'; color=:red)
         catch e
             println(e)
         end
@@ -162,21 +159,25 @@ function test_factor_extended(x, n, d=5; method=:roots_comb, seed=0)
         end
 
         printstyled(p, "\n"; color=:blue)
-        f = factor(p; method=method)
-        printstyled(f, "\n"; color=:magenta)
+        try
+            f = factor(p; method=method)
+            printstyled(f, "\n"; color=:magenta)
 
-        n₂ = sum(last(v) for v in f.factors)
+            if p isa AbstractPolynomialLike
+                println("Δ = ", poly(f) - p)
+            else
+                println("Δ = ", expand(simplify(f) - p))
+            end
 
-        if p isa AbstractPolynomialLike
-            println("Δ = ", poly(f) - p)
-        else
-            println("Δ = ", expand(simplify(f) - p))
-        end
+            n₂ = sum(last(v) for v in f.factors)
 
-        if n₂ < n₁
-            printstyled("possible incomplete factorization\n"; color=:yellow)
-        else
-            printstyled("OK!\n"; color=:green)
+            if n₂ < n₁
+                printstyled("possible incomplete factorization\n"; color=:yellow)
+            else
+                printstyled("OK!\n"; color=:green)
+            end
+        catch e
+            println(e)
         end
     end
     true
