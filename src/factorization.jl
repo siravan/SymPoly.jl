@@ -40,16 +40,40 @@ end
 
 decompose(eq) = wrap(decompose, eq)
 
-##################### Helper functions for Factorization #####################
+function decompose2(p::AbstractPolynomial)
+    deg(p) < 1 && return FactoredPoly(false, p)
+    p₀ = copy(p)
+    f = FactoredPoly()
+    p′ = derivative(p)
+    g = gcd(p, p′)
+    r = integer_poly(p ÷ g)
+    i = 1
+    x = var(p)
 
-# function integer_poly(p::AbstractPolynomial)
-#     p = rationalize(p)
-#     c = coefficients(p)
-#     l = lcm(denominator.(c)...)
-#     d = map(x -> BigInt(numerator(l*x)), c)
-#     return 1//l*one(p), polynomial(d, terms(p))
-#     # return 1//l*one(p), p*l
-# end
+    while !isone(g) && deg(r, x) > 0
+        s = gcd(g, r)
+        p = integer_poly(r ÷ s)
+        if !isone(p)
+            add_factor!(f, p ÷ leading(p), i)
+        end
+        i += 1
+        r = s
+        g = integer_poly(g ÷ s)
+    end
+
+    if !isone(r)
+        add_factor!(f, r ÷ leading(r), i)
+    end
+
+    c = integer_poly(p₀ ÷ poly(f))
+    if !isone(c)
+        add_factor!(f, c, 1)
+    end
+
+    return unrationalize(f)
+end
+
+##################### Helper functions for Factorization #####################
 
 # Lagrange interpolation algorithm for rational polynomials
 function interp_poly(x, xs, ys)
@@ -114,7 +138,8 @@ end
 function factor_monic_sk(p::AbstractPolynomial)
     p = rationalize(p)
     r = copy(p)
-    l, p = integer_poly(p)
+    l = coef(p)
+    p = integer_poly(p)
     x = var(p)
     f = FactoredPoly()
     A = Int[]
@@ -161,7 +186,7 @@ function factor_monic_sk(p::AbstractPolynomial)
 end
 
 function factor_schubert_kronecker(p::AbstractPolynomial)
-    _, pᵢ = integer_poly(p)
+    pᵢ = integer_poly(p)
     pₘ, c = to_monic(pᵢ)
     x = var(p)
 

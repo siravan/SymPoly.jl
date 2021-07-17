@@ -133,6 +133,8 @@ function test_factor_extended(x, n, d=5; method=:roots_comb, seed=0)
         (x, i) -> (rand(2:20)*x^5 + x^4 + 11x^3 + 13x^2 + 5x + 1),
         (x, i) -> (rand(2:20)*x^7 + 1),
         (x, i) -> sum(rand(3:10)*x^j for j=1:rand(5:10)),
+        (x, i) -> sum(x^rand(2:10)-1),
+        (x, i) -> sum(x^rand(2:10)+1),
     ]
 
     if seed != 0
@@ -159,6 +161,7 @@ function test_factor_extended(x, n, d=5; method=:roots_comb, seed=0)
         end
 
         printstyled(p, "\n"; color=:blue)
+        printstyled("λ = ", landau_mignotte(p), '\n'; color=:blue)
         try
             f = factor(p; method=method)
             printstyled(f, "\n"; color=:magenta)
@@ -197,7 +200,7 @@ function swinnerton_dyer(x, n)
         p *= x + k
     end
 
-    return last(integer_poly(p))
+    return integer_poly(p)
 end
 
 #############################################################################
@@ -218,4 +221,4 @@ function test_all()
     @test test_fraction(x)
 end
 
-@testset "arith" begin test_all() end
+# @testset "arith" begin test_all() end

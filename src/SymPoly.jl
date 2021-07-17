@@ -1,4 +1,4 @@
-module SymPoly
+# module SymPoly
 using Primes
 
 using MultivariatePolynomials
@@ -9,6 +9,8 @@ using SymbolicUtils: istree, operation, arguments
 using Symbolics: value, get_variables, expand_derivatives
 using SymbolicUtils.Rewriters
 # using SymbolicUtils.Code
+
+using LLLplus
 
 include("symbolics.jl")
 
@@ -54,4 +56,4 @@ end
 Primes.factor(p, q) = factor_rational(p, q)
 Primes.factor(r::RationalPoly) = factor_rational(r)
 
-end # module
+# end # module

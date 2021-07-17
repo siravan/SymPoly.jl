@@ -1,5 +1,5 @@
 
-function var(p::AbstractPolynomial)
+function var(p::AbstractPolynomialLike)
     vars = variables(p)
     if length(vars) == 1
         return vars[1]
@@ -10,7 +10,7 @@ function var(p::AbstractPolynomial)
     end
 end
 
-function var(p::AbstractMonomial)
+function var(p::AbstractMonomialLike)
     vars = variables(p)
     if length(vars) == 1
         return vars[1]
@@ -127,7 +127,7 @@ cont(p::AbstractPolynomialLike) = gcd(coefficients(p)...) * sign(leading(p))
 prim(p::AbstractPolynomialLike) = polynomial(coefficients(p) .÷ cont(p), terms(p))
 derivative(p::AbstractPolynomialLike) = differentiate(p, var(p))
 deg(p::Number) = 0
-deg(p::AbstractPolynomialLike, x) = maxdegree(p, x)
+deg(p::AbstractPolynomialLike, x) = x==nothing ? 0 : maxdegree(p, x)
 deg(p::AbstractPolynomialLike) = maxdegree(p, var(p))
 coef(p::AbstractPolynomialLike) = lcm(denominator.(coefficients(p))...)
 
@@ -148,16 +148,29 @@ end
 
 ###############################################################################
 
-function integer_poly(p::Polynomial{true,T}) where T<:Rational
+function integer_poly_coef(p::Polynomial{true,T}) where T<:Rational
     l = coef(p)
     1//l, polynomial(Int.(numerator.(coefficients(l*p))), terms(p))
 end
 
-function integer_poly(p::AbstractPolynomialLike)
-    1, polynomial(round.(Int, coefficients(p)), terms(p))
+integer_poly_coef(p::Polynomial{true,T}) where T<:Integer = 1, p
+integer_poly_coef(p::Polynomial{true,T}) where T<:Real = 1, integer_poly(p)
+
+function integer_poly(p::Polynomial{true,T}) where T<:Rational
+    l = coef(p)
+    polynomial(Int.(numerator.(coefficients(l*p))), terms(p))
 end
 
-integer_poly(p::Polynomial{true,T}) where T<:Integer = (1, p)
+function integer_poly(p::AbstractPolynomialLike)
+    polynomial(round.(Int, coefficients(p)), terms(p))
+end
+
+function bigint_poly(p::AbstractPolynomialLike)
+    p = integer_poly(p)
+    polynomial(BigInt.(coefficients(p)), terms(p))
+end
+
+integer_poly(p::Polynomial{true,T}) where T<:Integer = p
 
 function to_monic(p::Polynomial{true,T}) where T<:Rational
     c = leading(p)
@@ -168,7 +181,7 @@ end
 
 function to_monic(p::Polynomial{true,T}) where T<:Integer
     q, c = to_monic(rationalize(p))
-    last(integer_poly(q)), Int(numerator(c))
+    integer_poly(q), Int(numerator(c))
 end
 
 function from_monic(p::Polynomial{true,T}, c) where T<:Rational
@@ -179,7 +192,7 @@ end
 
 function from_monic(p::Polynomial{true,T}, c) where T<:Integer
     q = from_monic(rationalize(p), Rational(c))
-    last(integer_poly(q))
+    integer_poly(q)
 end
 
 from_monic(p, c) = from_monic(polynomial(p), c)
@@ -187,13 +200,14 @@ from_monic(p, c) = from_monic(polynomial(p), c)
 ###############################################################################
 
 function standard_form(p::Polynomial{true,T}) where T<:Integer
-    q, lc = to_monic(prim(p))
-    undo = s -> from_monic(s, lc)
-    q, undo
+    # q, lc = to_monic(prim(p))
+    # undo = s -> from_monic(s, lc)
+    # q, undo
+    prim(p), x->x
 end
 
 function standard_form(p::Polynomial{true,T}) where T<:Rational
-    _, q = integer_poly(p)
+    q = integer_poly(p)
     standard_form(q)
 end
 

@@ -31,14 +31,15 @@ end
     provided. For example, find_roots(sin(x), x, 10) returns 10 different, but
     not necessarily sequential, multiples of π
 """
-function find_roots(p::AbstractPolynomial, x, n=-1; abstol=1e-8)
+function find_roots(T, p::AbstractPolynomial, x, n=-1; abstol=1e-8)
     n = (n == -1 ? deg(p, x) : n)
-    rs = Float64[]
-    zs = Complex[]
+    rs = T[]
+    zs = Complex{T}[]
+    abstol = T(abstol)
 
     while n > 0
-        z = solve_newton(p, x, exp(2π*im*rand()))
-        if z != nothing            
+        z = solve_newton(p, x, exp(2π*im*rand()); abstol=abstol)
+        if z != nothing
             if abs(imag(z)) < abstol
                 r = real(z)
                 push!(rs, r)
@@ -55,4 +56,8 @@ function find_roots(p::AbstractPolynomial, x, n=-1; abstol=1e-8)
         end
     end
     sort(rs), zs
+end
+
+function find_roots(p::AbstractPolynomial, x, n=-1; abstol=1e-8)
+    find_roots(Float64, p, x, n; abstol=abstol)
 end
