@@ -1,4 +1,4 @@
-# using SymPoly
+using SymPoly
 using SymbolicUtils, Test
 using DynamicPolynomials
 
@@ -24,6 +24,8 @@ function test_eq(x, f, name; n=10, min_deg=0, max_deg=10, sparcity=0.5)
     for i = 1:n
         p = generate_rand_poly(x; max_deg, sparcity)
         q = generate_rand_poly(x; min_deg, max_deg, sparcity)
+
+        if iszero(p) || iszero(q) continue end
 
         printstyled("P1 = ", p, '\n'; color=:green)
         printstyled("P2 = ", q, '\n'; color=:blue)

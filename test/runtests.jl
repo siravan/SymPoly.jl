@@ -101,7 +101,10 @@ function test_fraction(x; n=10)
         try
             f = factor(p, q)
             print(f, '\n')
-            if ~isapprox(poly(f)(x => π), p(x => π) / q(x => π))
+            A = poly(f)(x => π)
+            B = p(x => π) / q(x => π)
+            if ~isapprox(A, B)
+                printstyled("incorrect: $A ≆ $B\n"; color=:red)
                 outcome = false
             else
                 k += 1
@@ -133,8 +136,8 @@ function test_factor_extended(x, n, d=5; method=:roots_comb, seed=0)
         (x, i) -> (rand(2:20)*x^5 + x^4 + 11x^3 + 13x^2 + 5x + 1),
         (x, i) -> (rand(2:20)*x^7 + 1),
         (x, i) -> sum(rand(3:10)*x^j for j=1:rand(5:10)),
-        (x, i) -> sum(x^rand(2:10)-1),
-        (x, i) -> sum(x^rand(2:10)+1),
+        (x, i) -> (x^rand(2:10)-1),
+        (x, i) -> (x^rand(2:10)+1),
     ]
 
     if seed != 0
@@ -147,8 +150,9 @@ function test_factor_extended(x, n, d=5; method=:roots_comb, seed=0)
         println("-------------------------------------")
         p = one(x)
         n₁ = 0
-        for i=1:d
-            q = frags[rand(1:m)](x, i)
+        for i = 1:d
+            r = rand(1:m)
+            q = frags[r](x, i)
             k = rand(1:2)
             print('(', q, ")^", k)
             if i < d
@@ -161,7 +165,7 @@ function test_factor_extended(x, n, d=5; method=:roots_comb, seed=0)
         end
 
         printstyled(p, "\n"; color=:blue)
-        printstyled("λ = ", landau_mignotte(p), '\n'; color=:blue)
+        # printstyled("λ = ", landau_mignotte(p), '\n'; color=:blue)
         try
             f = factor(p; method=method)
             printstyled(f, "\n"; color=:magenta)
@@ -212,13 +216,15 @@ function test_all()
     @test test_deriv(x)
     println("********* Schubert-Kronecker ************")
     @test test_factor(x; method=:schubert_kronecker)
-    println("********** Roundabout *******************")
-    @test test_factor(x; method=:roundabout)
+    # println("********** Roundabout *******************")
+    # @test test_factor(x; method=:roundabout)
     println("********* Roots Combinations*************")
     @test test_factor(x; method=:roots_comb)
-    @test test_factor_extended(x, 50; method=:roots_comb)
-    @test test_factor_extended(𝑥, 50; method=:roots_comb)
+    println("************* Roots SSP *****************")
+    @test test_factor(x; method=:roots_SSP)
+    @test test_factor_extended(x, 50; method=:roots_SSP)
+    @test test_factor_extended(𝑥, 50; method=:roots_SSP)
     @test test_fraction(x)
 end
 
-# @testset "arith" begin test_all() end
+@testset "arith" begin test_all() end

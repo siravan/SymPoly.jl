@@ -294,7 +294,7 @@ function factor_modular(p::Polynomial{true, ℤₚ{n}}) where n
 
         if !isone(g)
             f₁ = factor_equal_degree(g, i)
-            f₁ == nothing && return f
+            # f₁ == nothing && return f
             println(f₁)
             for gₛ in f₁
                 if deg(gₛ) > 0

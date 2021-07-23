@@ -123,7 +123,7 @@ Base.gcdx(u, v) = wrap(gcd_extended, u, v)
 ##############################################################################
 
 leading(p::AbstractPolynomialLike) = leadingcoefficient(p)
-cont(p::AbstractPolynomialLike) = gcd(coefficients(p)...) * sign(leading(p))
+cont(p::AbstractPolynomialLike) = iszero(p) ? 0 : gcd(coefficients(p)...) * sign(leading(p))
 prim(p::AbstractPolynomialLike) = polynomial(coefficients(p) .÷ cont(p), terms(p))
 derivative(p::AbstractPolynomialLike) = differentiate(p, var(p))
 deg(p::Number) = 0

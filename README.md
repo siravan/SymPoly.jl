@@ -103,13 +103,15 @@ julia> r, s = find_roots(p, x)
 
 1. `decompose(p)` that uses the [Yun's algorithm](https://en.wikipedia.org/wiki/Square-free_polynomial) to decompose a polynomial into a list of co-prime and square-free factors. This is a fast algorithm but the decomposition is incomplete. For some applications, such as simplifying rational expressions, this is all that is needed. In other occasions, it can serve as the first step in a completet factorization (see below).
 
-2. `factor(p; method)`, which provided a complete factorization of `p`. Currently, three different factorization methods are implements:
+2. `factor(p; method)`, which provided a complete factorization of `p`. Currently, four different factorization methods are implements:
 
   * `method=:schubert_kronecker`: as its name implies, this method uses the Schubert-Kronecker algorithm. Note that this algorithm is based on old ideas (Friedrich Theodor von Schubert died in 1825 and Leopold Kronecker died in 1891) and is not efficient and is only usable for low-degree polynomials. It is mainly included for historical reasons and as verification of other methods.
 
-  * `method=:roundabout`: this method uses the *roundabout* by first converting the polynomial to one over a finite field (ℤₚ), then factoring over the finite field (**Zassenhaus algorithm**), and finally, converting the factorization over the finite field back to integers (**Hensel Lifting**).
+  * `method=:roots_comb`: this method finds the factors based on the combinatorial analysis of the real and complex roots of `p` (exponential algorithm).
 
-  * `method=:roots_comb` (*default*): this method finds the factors based on the combinatorial analysis of the real and complex roots of `p`. Currently, this algorithm is the fastest for for small and medium size (degree < 50) polynomials.
+  * `method=:roots_SSP` (*default*): this method is similar to `:roots_comb` as it is based on finding subset of the roots which add to an integer. This is a classic *Subset Sum Problem* and `:roots_SSP` uses a pseudo-polynomial time algorithm to solve this problem. Currently, this algorithm is the fastest one implemented in SymPoly and works up to a polynomial degree 128.
+
+  * `method=:roundabout` (*not available as of version 1.4*): this method uses the *roundabout algorithm* by first converting the polynomial to one over a finite field (ℤₚ), then factoring over the finite field (**Zassenhaus algorithm**), and finally, converting the factorization over the finite field back to integers (**Hensel Lifting**).
 
 The factorization functions returns a value of type `FactoredPoly`, which is a list of `factor => power` pairs. We can access the factors and powers with the help of `factors`, `power`, `poly`, and the overloaded index operator (see below). Let's look at an example.
 

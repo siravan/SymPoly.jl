@@ -1,4 +1,8 @@
-using Random
+factor_roots_comb(p::AbstractPolynomialLike) = factor_main(p, factor_sqfr_roots)
+factor_roots_comb(eq) = wrap(factor_roots_comb, eq)
+
+factor_roots_SSP(p::AbstractPolynomialLike) = factor_main(p, factor_sqfr_SSP)
+factor_roots_SSP(eq) = wrap(factor_roots_SSP, eq)
 
 ###################### Common Factoring ************************************
 
@@ -31,7 +35,7 @@ function add_coefficient!(P, p::AbstractPolynomialLike, c₀)
     !isone(c) && add_factor!(P, c, 1)
 end
 
-function combine_factorization_algs(p::AbstractPolynomialLike, lc, fs...; resolution=1e-5, abstol=1e-10)
+function combine_factorization_algs(p::AbstractPolynomialLike, lc, fs...; resolution=0, abstol=1e-10)
     F₁, G₁, lc = fs[1](p, lc; resolution, abstol)
 
     if isempty(G₁) || length(fs) == 1
@@ -102,7 +106,7 @@ function factor_sqfr_roots(p::AbstractPolynomialLike, lc; max_deg=100000, max_mi
     try
         for k = 1:min(m÷2, max_deg)
             n₁ = n - count_ones(mask)
-            if n₁*log(n₁) - k*log(k) - (n₁-k)*log(n₁-k) < 18
+            if n₁*log(n₁) - k*log(k) - (n₁-k)*log(n₁-k) < 15
                 mask = traverse_patterns(0, mask, n, k, cmask, test_fun)
             end
         end
@@ -115,43 +119,13 @@ end
 
 ###############################################################################
 
-function factor_roots_comb(p::AbstractPolynomialLike)
-    x = var(p)
-    t = terms(p)
-    c = coefficients(p)
-    d = degree.(t)
-    nz = sum(d .> 0)
-    g = gcd(d...)
-
-    f = FactoredPoly()
-
-    if g > 1 && nz > 1
-        q = sum(c[i]*x^(d[i] ÷ g) for i=1:length(d))
-        f₁ = factor_roots_comb2(q)
-
-        for w₁ in factors(f₁)
-            v₁, k₁ = first(w₁), last(w₁)
-            q = v₁(x => x^g)
-            f₂ = factor_roots_comb2(q)
-
-            for w₂ in factors(f₂)
-                v₂, k₂ = first(w₂), last(w₂)
-                add_factor!(f, v₂, k₁*k₂)
-            end
-        end
-        return f
-    else
-        return factor_roots_comb2(p)
-    end
-end
-
-factor_roots_comb(eq) = wrap(factor_roots_comb, eq)
-
 near_integer(x::Float64; abstol=1e-5) = abs(x - round(x)) < abstol
-near_integer(x::BigFloat; abstol=1e-5) = abs(x - round(x)) < abstol
+near_integer(x::BigFloat; abstol=1e-10) = abs(x - round(x)) < abstol
 exclude(v, l) = [v[i] for i=1:length(v) if i ∉ l]
 testbit(x, n) = isodd(x >> (n-1))
-
+expand_binary(x::Int) = [i for i=1:64-leading_zeros(x) if testbit(x,i)]
+expand_binary(x::BigInt) = [i for i=1:128-leading_zeros(x) if testbit(x,i)]
+expand_binary(x, n) = [i for i=1:n if testbit(x,i)]
 
 # generates all n-bit numbers with d 1 bits
 # excluding mask bits
@@ -184,124 +158,96 @@ simple_factor(x, σ, μ, i::Integer) = simple_factor(x, σ, μ, [i])
 
 ##############################################################################
 
-function factor_sqfr_lattice(p::AbstractPolynomialLike, lc; max_found=1, abstol=1e-10, atol=1e-6, runs=500)
-    factor_sqfr_lattice(Float64, p, lc; runs=runs, max_found=max_found, abstol=abstol, atol=atol)
-end
-
-function factor_sqfr_lattice(T, p::AbstractPolynomialLike, lc; max_found=1, abstol=1e-10, atol=0, runs=5000)
-    p = rationalize(p) / leading(p)
-    c = T(1.0 / cont(p))
-    p = prim(p)
-    v = polynomial(T.(coefficients(p)), terms(p))
-    r, s = find_roots(T, v, x)
-    nᵣ = length(r)
-    σ = T.([r; 2*real.(s[1:2:end])])
-    μ = T.([r; abs2.(s[1:2:end])])
-    ζ = σ*c .- floor.(σ*c)
-    n = length(σ)
-    m = round(Int, sum(ζ))
-
-    k = 1.0
-    G = []
-    found = 0
-
-    for i = 1:runsp
-        for k = 1:m-1
-            (length(ζ) < 2 || found == max_found) && break
-
-            b, _ = local_subsetsum(T.(ζ), T(k); atol=atol)
-
-            if !ismissing(b[1])
-                l = [i for i=1:length(σ) if b[i] .> 0.5]
-                sum_σ = sum(σ[l]; init=0.0)
-
-                if near_integer(sum_σ*c) && sum(l) > 0
-                    q = simple_factor(x, σ, μ, l)
-                    maximum(coefficients(q)) > typemax(Int)/10 && continue
-                    q = prim(integer_poly(q*c))
-
-                    if deg(q) > 0 && iszero(p % q)
-                        if !any(isequal.(q, G))
-                            push!(G, q)
-                            p = remove_factor(p, q)
-                            l₀ = [i for i=1:length(σ) if i ∉ l]
-                            ζ = ζ[l₀]
-                            σ = σ[l₀]
-                            μ = μ[l₀]
-                            m = round(Int, sum(ζ))
-                            found += 1
-                        end
-                    end
-                end
-            end
-        end
-
-        θ = shuffle(1:length(ζ))
-        ζ = ζ[θ]
-        σ = σ[θ]
-        μ = μ[θ]
-    end
-
-    deg(p) > 0 && push!(G, p)
-    [], G, lc
-end
-
-###############################################################################
-
 frac(x) = x - floor(x)
 index(x, L) = 1 + floor(Int, L * x)
 
-function solve_SSP(σ::Array{T}; resolution=1e-5) where T<:Real
+struct Context{T, S}
+    failures::BitMatrix
+    σ::Vector{T}
+    L::Int
+    ls::Vector{S}
+    abstol::T
+    cmask::S
+    cutoff::Int
+end
+
+Base.size(ctx::Context) = size(ctx.failures)
+index(ctx::Context, t) = index(t, ctx.L)
+add_path!(ctx::Context, path) = push!(ctx.ls, path)
+@inbounds is_failure(ctx::Context, k, i) = ctx.failures[k,i]
+@inbounds fail(ctx::Context, k, i) = (ctx.failures[k,i] = true)
+can_grow(ctx::Context, path) = count_ones(path) + count_ones(path & ctx.cmask) < ctx.cutoff
+
+"""
+    solve_SSP is the main SSP-solving search function
+    solve_SSP implements a pseudo-polynomial time dynamic programming algorithm
+    the actual search phase is done by traverse_SSP
+"""
+function solve_SSP(σ::Array{T}, μ::Array{T}; resolution=1e-5) where T<:Real
     L = round(Int, 1 / resolution)
     σ = frac.(σ)
     m = L * round(Int, max(sum(σ),one(T)))
     n = length(σ)
+
     failures = falses(n, m)
+    S = (n <= 64 ? Int : Int128)
+    path = zero(S)
+    ls = S[]
 
-    ls = Int[]
-    path = (n <= 64 ? zero(Int) : zero(BigInt))
+    cmask = sum(one(S)<<(i-1) for i=1:n if μ[i] != σ[i]; init=zero(S))
+    cutoff = (n + count_ones(cmask)) ÷ 2
 
-    traverse_SSP(1, zero(T), failures, σ, L, path, ls)
-    return ls
+    ctx = Context{T,S}(failures, σ, L, ls, resolution, cmask, cutoff)
+    traverse_SSP(ctx, 1, zero(T), path)
+    return ctx.ls
 end
 
-function traverse_SSP(k, t, failures, σ, L, path, ls)
-    n, m = size(failures)
-    i = index(t, L)
-
-    if i > m
-        return false
-    end
+"""
+    traverse_SSP is the inner loop of the SSP-solving algorithm
+    this function consumes the bulk of time of factorization and needs to be fine-tuned!
+"""
+function traverse_SSP(ctx::Context, k, t, path)
+    n, m = size(ctx)
 
     if k == n + 1
-        if 0 < count_ones(path) < n && near_integer(t; abstol=1.0/L)
-            push!(ls, path)
+        if 0 < count_ones(path) < n && near_integer(t; abstol=ctx.abstol)
+            add_path!(ctx, path)
             return true
         end
         return false
     end
 
-    if failures[k,i]
-        return false
+    i = index(ctx, t)
+
+    if i > m return false end
+
+    if is_failure(ctx, k, i) return false end
+
+    if can_grow(ctx, path)
+        success = traverse_SSP(ctx, k+1, t+ctx.σ[k], path | (1 << (k-1))) |
+                  traverse_SSP(ctx, k+1, t, path)
+    else
+        success = traverse_SSP(ctx, k+1, t, path)
     end
 
-    success = traverse_SSP(k+1, t+σ[k], failures, σ, L, path | (1 << (k-1)), ls) |
-              traverse_SSP(k+1, t, failures, σ, L, path, ls)
-
     if !success
-        failures[k,i] = true
+        fail(ctx, k, i)
     end
 
     success
 end
 
-expand_binary(x, n) = [i for i=1:n if testbit(x,i)]
+##############################################################################
 
-function factor_sqfr_SSP(p::AbstractPolynomialLike, lc; abstol=1e-10, resolution=1e-5)
+"""
+    `factor_sqfr_SSP` factors a square-free polynomial `p` using `solve_SSP`
+    `lc` is the leading coefficient
+"""
+function factor_sqfr_SSP(p::AbstractPolynomialLike, lc; abstol=1e-10, resolution=0)
     factor_sqfr_SSP(BigFloat, p, lc; abstol, resolution)
 end
 
-function factor_sqfr_SSP(T, p::AbstractPolynomialLike, lc; abstol=1e-10, resolution=1e-5)
+function factor_sqfr_SSP(T, p::AbstractPolynomialLike, lc; abstol=1e-10, resolution=0)
     x = var(p)
     p = rationalize(p) / leading(p)
     lc = T(1.0 / cont(p))
@@ -309,9 +255,12 @@ function factor_sqfr_SSP(T, p::AbstractPolynomialLike, lc; abstol=1e-10, resolut
 
     G = find_factors(T, x, p, lc; resolution)
     sort!(G; by=deg)
-    [], G, lc
+    G, [], lc
 end
 
+"""
+    `find_factors` find candidate factors of `p`
+"""
 function find_factors(T, x, p, lc; resolution=1e-5)
     F = find_factor(T, x, p, lc; resolution)
     length(F) == 1 && return F
@@ -324,7 +273,14 @@ function find_factors(T, x, p, lc; resolution=1e-5)
     return G
 end
 
-function find_factor(T, x, p, lc; abstol=1e-10, resolution=1e-5)
+"""
+    `find_factor` is the core of the SSP factorization algorithm
+"""
+function find_factor(T, x, p, lc; abstol=1e-10, resolution=0)
+    if resolution == 0
+        resolution = 1e-3 / sqrt(deg(p))
+    end
+
     v = polynomial(T.(coefficients(p)), terms(p))
     r, s = find_roots(T, v, x; abstol)
     σ = T.([r; 2*real.(s[1:2:end])])
@@ -335,21 +291,39 @@ function find_factor(T, x, p, lc; abstol=1e-10, resolution=1e-5)
     σ = σ[w]
     μ = μ[w]
 
-    ls = solve_SSP(σ*lc; resolution)
+    ls = solve_SSP(σ*lc, μ*lc; resolution)
+    ls = sort(ls; by=count_ones)
+
+    d = zero(eltype(ls))
     F = []
+    x₀ = find_test_x(p)
+    α = round(BigInt, lc*p(x₀))
+    # α = lc*p(im)
 
     for c in ls
+        c = c ⊻ d
         if c > 0
             l = expand_binary(c, n)
             S = sum(σ[l]; init=0.0)
 
             if near_integer(S*lc)
+                β = round(BigInt, lc*simple_factor(x₀, σ, μ, l))
+                if !iszero(β) && !iszero(α % β) continue end
+                # β = lc*simple_factor(im, σ, μ, l)
+                # if !iszero(β)
+                #     αβ = α * conj(β) / abs2(β)
+                #     if !near_integer(real(αβ)) || !near_integer(imag(αβ))
+                #         continue
+                #     end
+                # end
+
                 q = simple_factor(x, σ, μ, l)
                 if maximum(coefficients(q)) < typemax(Int)/10
                     q = prim(integer_poly(q*lc))
-                    g = gcd(p, q)
+                    g = q #gcd(p, q)
 
                     if !isone(g) && iszero(p % g)
+                        d |= c
                         p = prim(remove_factor(p, g))
                         push!(F, g)
                     end
@@ -360,4 +334,20 @@ function find_factor(T, x, p, lc; abstol=1e-10, resolution=1e-5)
 
     !isone(p) && push!(F, p)
     return F
+end
+
+"""
+    `find_test_x` finds the integer with the smallest absolute value as a test number
+    note that 1 is used implicitely by the core algorithm
+    `find_test_x` searches integers in -1, 2, -2, 3, -3,... list and returns the
+    first one that results in a nonzero `p`
+"""
+function find_test_x(p)
+    i = 1
+    while true
+        x₀ = BigInt(1 + i÷2)
+        x₀ = isodd(i) ? -x₀ : x₀
+        if p(x₀) != 0 return x₀ end
+        i += 1
+    end
 end

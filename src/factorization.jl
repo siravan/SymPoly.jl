@@ -225,27 +225,33 @@ factor_schubert_kronecker(eq) = wrap(factor, eq)
     based on part of Algorithm 7.1 in "Computer Algebra, Concepts and Techniques" by Edmund A. Lamangna
 """
 function factor_rational(r::RationalPoly)
-    p, q = numerator(r), denominator(r)
-    !isequal(var(p), var(q)) && error("the numerator and denominator should have the same main variable")
-
-    # p = rationalize(p)
-    # q = rationalize(q)
+    n, d = numerator(r), denominator(r)
+    !isequal(var(n), var(d)) && error("the numerator and denominator should have the same main variable")
 
     f = FactoredPoly(true)
-    p₀, p = divrem(p, q)
 
-    if !iszero(p₀)
-        add_factor!(f, p₀)
+    n = rationalize(n)
+    d = rationalize(d)
+    q, r = divrem(n, d)
+
+    if !iszero(q)
+        add_factor!(f, q)
     end
 
-    for w in factors(decompose(q))
+    for w in factors(decompose(d))
         v, k = rationalize(first(w)), last(w)
-        q₁ = v ^ k
-        q = q ÷ q₁
-        g, s, t = gcdx(q₁, q)
-        term = ((t*p) % q₁) / v
-        !iszero(term) && add_factor!(f, unrationalize(numerator(term))/unrationalize(denominator(term)), k)
-        p = s * p
+        d₁ = v ^ k
+        d = d ÷ d₁
+        g, s, t = gcdx(d₁, d)
+
+        num = rationalize((t*r) % d₁)
+        denom = v
+
+        if !iszero(num)
+            c = cont(num) // cont(denom)
+            add_factor!(f, c * prim(num) / prim(denom), k)
+        end
+        r = s * r
     end
 
     f

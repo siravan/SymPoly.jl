@@ -34,7 +34,7 @@ function poly(f::FactoredPoly)
             if p isa AbstractPolynomial
                 push!(l, p)
             else
-                push!(l, numerator(p) / rationalize(denominator(p))^k)
+                push!(l, numerator(p) / (denominator(p))^k)
             end
         end
         return length(l)==0 ? 0 : sum(l)
@@ -43,31 +43,39 @@ function poly(f::FactoredPoly)
     end
 end
 
+function show_cont(io, c, i)
+    if i == 1
+        if c < 0
+            print(io, "-")
+        end
+    else
+        print(io, c > 0 ? " + " : " - ")
+    end
+end
+
 function Base.show(io::IO, f::FactoredPoly)
     i = 1
     if f.rational
         for w in factors(f)
-            i > 1 && print(io, " + ")
-            i += 1
             p, k = first(w), last(w)
 
             if p isa AbstractPolynomial
-                c, q = integer_poly(p)
+                c = cont(p)
+                show_cont(io, c, i)
                 if isone(c)
-                    print(io, q)
+                    print(io, prim(p))
                 else
-                    print(io, c, " * (", q, ")")
+                    print(io, abs(c), " * (", prim(p), ")")
                 end
             elseif p isa RationalPoly
-                cn, n = integer_poly(numerator(p))
-                cd, d = integer_poly(denominator(p))
-                c = cn ÷ cd
-
-                if !isone(c)
-                    print(io, c, " * ")
+                c = cont(numerator(p)) // cont(denominator(p))
+                show_cont(io, c, i)
+                c = abs(c)
+                if isone(c)
+                    print(io, '(', prim(numerator(p)), ") / (", prim(denominator(p)), ")")
+                else
+                    print(io, c, " * (", prim(numerator(p)), ") / (", prim(denominator(p)), ")")
                 end
-
-                print(io, '(', n, ") / (", d, ")")
 
                 if k != 1
                     print(io, "^", k)
@@ -75,6 +83,7 @@ function Base.show(io::IO, f::FactoredPoly)
             else
                 print(io, p)
             end
+            i += 1
         end
     else
         for w in factors(f)

@@ -1,4 +1,5 @@
-# module SymPoly
+module SymPoly
+
 using Primes
 
 using MultivariatePolynomials
@@ -9,8 +10,6 @@ using SymbolicUtils: istree, operation, arguments
 using Symbolics: value, get_variables, expand_derivatives
 using SymbolicUtils.Rewriters
 # using SymbolicUtils.Code
-
-using LLLplus
 
 include("symbolics.jl")
 
@@ -41,19 +40,21 @@ include("roots_comb.jl")
 
 #############################################################################
 
-function Primes.factor(p; method=:roots_comb)
+function Primes.factor(p; method=:roots_SSP)
     if method == :schubert_kronecker
         return factor_schubert_kronecker(p)
-    elseif method == :roundabout
-        return factor_roundabout(p)
+    # elseif method == :roundabout
+    #    return factor_roundabout(p)
     elseif method == :roots_comb
         return factor_roots_comb(p)
+    elseif method == :roots_SSP
+        return factor_roots_SSP(p)
     else
-        error("underfined factorization method")
+        error("undefined factorization method")
     end
 end
 
 Primes.factor(p, q) = factor_rational(p, q)
 Primes.factor(r::RationalPoly) = factor_rational(r)
 
-# end # module
+end # module
