@@ -294,8 +294,7 @@ function factor_modular(p::Polynomial{true, ℤₚ{n}}) where n
 
         if !isone(g)
             f₁ = factor_equal_degree(g, i)
-            # f₁ == nothing && return f
-            println(f₁)
+            if f₁ == nothing return nothing end
             for gₛ in f₁
                 if deg(gₛ) > 0
                     k = 0
@@ -398,14 +397,14 @@ function find_integer_factorization(p::AbstractPolynomial, f::FactoredPoly)
 
     mask = 0
     println("n = ", n)
-    for k = 1:n÷2
-        if binomial(n - count_ones(mask), k) > 100000
-            break
-        end
+    for k = 1:n
+        # if binomial(n - count_ones(mask), k) > 100000
+        #     break
+        # end
         mask = traverse_patterns(0, mask, n, k, fun)
     end
 
-    f₁, integer_poly(p₀ ÷ poly(f₁))
+    integer_poly(p₀ ÷ poly(f₁)), f₁
 end
 
 ##############################################################################
@@ -418,24 +417,30 @@ function factor_combined(p::AbstractPolynomialLike; N=20, first_prime=3)
     fc = 0  # failure count
     a = first_prime
 
-    while deg(p) > N
-        a = nextprime(a*2)
+    while deg(p, x) > N
+        println(p)
+        a = nextprime(a+1)
         println(a)
         q = modular(a, p)
-        if !isone(gcd(q, derivative(q))) continue end
+        # if !isone(gcd(q, derivative(q))) continue end
+        println(q)
         f = factor_modular(q)
-        f, p = find_integer_factorization(p, f)
+        println(f)
 
-        if length(f) == 0
-            fc += 1
-            if fc == 5
-                break
+        if f != nothing
+            p, f = find_integer_factorization(p, f)
+
+            if length(f) == 0
+                fc += 1
+                if fc == 5
+                    break
+                end
+            else
+                fc = 0
             end
-        else
-            fc = 0
-        end
 
-        combine!(f₀, f)
+            combine!(f₀, f)
+        end
     end
 
     if 1 < deg(p) <= N
