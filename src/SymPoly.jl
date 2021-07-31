@@ -11,6 +11,9 @@ using Symbolics: value, get_variables, expand_derivatives
 using SymbolicUtils.Rewriters
 # using SymbolicUtils.Code
 
+using Symbolics
+using ModelingToolkit: @parameters
+
 include("symbolics.jl")
 
 export poly, sym
