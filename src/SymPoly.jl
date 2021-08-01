@@ -13,6 +13,8 @@ using SymbolicUtils.Rewriters
 
 using Symbolics
 
+using DataDrivenDiffEq.Optimize
+
 include("symbolics.jl")
 
 export poly, sym

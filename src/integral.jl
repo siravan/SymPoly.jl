@@ -104,21 +104,21 @@ end
     a pair of expressions, solved is the solved integral and unsolved is the residual unsolved
     portion of the input
 """
-function integrate(eq; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false)
+function integrate(eq; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
     x = var(eq)
     if x == nothing
         @syms 𝑥
         return 𝑥 * eq, 0
     end
-    integrate(eq, x; abstol, num_trials, num_steps, lo, hi, show_basis)
+    integrate(eq, x; abstol, num_trials, num_steps, lo, hi, show_basis, opt)
 end
 
-function integrate(eq::SymbolicUtils.Add, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false)
+function integrate(eq::SymbolicUtils.Add, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
     solved = 0
     unsolved = 0
 
     for p in arguments(eq)
-        s, u = integrate(p, x; abstol, num_steps, num_trials, lo, hi, show_basis)
+        s, u = integrate(p, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
         solved += s
         unsolved += u
     end
@@ -126,7 +126,7 @@ function integrate(eq::SymbolicUtils.Add, x; abstol=1e-6, num_steps=3, num_trial
     solved, unsolved
 end
 
-function integrate(eq, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false)
+function integrate(eq, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
     eq₁ = apply_integration_rules(expand(eq))
     basis = generate_basis(eq₁, x)
 
@@ -139,7 +139,7 @@ function integrate(eq, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.
         Δbasis = [expand_derivatives(D(f)) for f in basis]
 
         for j = 1:num_trials
-            y, ϵ = try_integrate(eq, x, basis, Δbasis; abstol, lo, hi)
+            y, ϵ = try_integrate(eq, x, basis, Δbasis; abstol, lo, hi, opt)
             if ϵ < abstol return y, 0 end
         end
     end
@@ -159,7 +159,7 @@ rms(x) = sqrt(sum(x.^2) / length(x))
     -------
     integral, error
 """
-function try_integrate(eq, x, basis, Δbasis; abstol=1e-6, lo=-5.0, hi=5.0, attemp_ratio=5)
+function try_integrate(eq, x, basis, Δbasis; abstol=1e-6, lo=-5.0, hi=5.0, attemp_ratio=5, opt = STLSQ(exp.(-10:1:0)))
     n = length(basis)
     # A is an nxn matrix holding the values of the fragments at n random points
     # b hold the value of the input function at those points
@@ -191,7 +191,8 @@ function try_integrate(eq, x, basis, Δbasis; abstol=1e-6, lo=-5.0, hi=5.0, atte
 
     if det(A) ≈ 0 return nothing, 1e6 end
 
-    q₀ = A \ b
+    q₀ = Optimize.init(opt, A, b)
+    @views Optimize.sparse_regression!(q₀, A, permutedims(b)', opt, maxiter = 1000)
     q = nice_parameters(q₀)
     ϵ = rms(A * q - b)
     sum(q[i]*basis[i] for i = 1:length(basis) if q[i] != 0; init=zero(x)), ϵ
