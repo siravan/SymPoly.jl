@@ -4,7 +4,7 @@
 
 1. **SymPoly.jl** is a bridge between the [Julia Symbolics](https://github.com/JuliaSymbolics/Symbolics.jl) expressions and [Julia Algebra](https://github.com/JuliaAlgebra) polynomials (*DynamicPolynomials* in https://github.com/JuliaAlgebra/DynamicPolynomials.jl).
 
-2. **SymPoly.jl** provides a collections of advances *univariate* polynomial algorithms, including roof finding, extended greatest common divisor (GCD), polynomial factorization, and partial rational decomposition.
+2. **SymPoly.jl** provides a collections of advances *univariate* polynomial algorithms, including roof finding, extended greatest common divisor (GCD), polynomial factorization, partial rational decomposition, and **symbolic integration**.
 
 ## General Polynomials
 
@@ -205,3 +205,49 @@ julia> q = (𝑥-1)^2 * (𝑥-2)
 julia> factor(p, q)
 (-3//1)*((𝑥 - 2)^-1) + ((𝑥 - 1)^-2)*((4//1)*𝑥 - (1//1))
 ```
+
+### Symbolic Integration
+
+Function `integrate` returns the integral of a Symbolics.jl expression with *constant* coefficients. It uses a randomized algorithm based on a hybrid of the method of indeterminate coefficients and SINDy (Sparse Identification of Nonlinear Dynamics) and is able to solve a subset of basic standard integrals (polynomials, exponential/logarithmic, trigonometric and hyperbolic, rational and squarer root).
+
+`integrate` returns a pair of expressions. The first one is the solved integral and the second one is the sum of the unsolved terms. If `integrate` is successful, the unsolved portion is reported as 0.
+
+```julia
+julia> integrate(3x^3 + 2x - 5)
+(x^2 + (3//4)*(x^4) - (5x), 0)
+
+julia> integrate((5 + 2x)^-1)
+((1//2)*log((5//2) + x), 0)
+
+julia> integrate(1 / (6 + x^2 - (5x)))
+(log(x - 3) - log(x - 2), 0)
+
+julia> integrate(x^2/(16 + x^2))
+(x + 4atan((-1//4)*x), 0)
+
+julia> integrate(x^2/sqrt(4 + x^2))
+(2x*((4 + x^2)^-0.5) + (1//2)*(x^3)*((4 + x^2)^-0.5) - (2log(abs(x + sqrt(4 + x^2)))), 0)
+
+julia> integrate(x^2*log(x))
+((1//3)*log(x)*(x^3) - ((1//9)*(x^3)), 0)
+
+julia> integrate(x^2*exp(x))
+(2exp(x) + exp(x)*(x^2) - (2x*exp(x)), 0)
+
+julia> integrate(tan(2x))
+((-1//2)*log(cos(2x)), 0)
+
+julia> integrate(sec(x)*tan(x))
+(cos(x)^-1, 0)
+
+julia> integrate(cosh(2x)*exp(x))
+((2//3)*exp(x)*sinh(2x) - ((1//3)*exp(x)*cosh(2x)), 0)
+
+julia> integrate(cosh(x)*sin(x))
+((1//2)*sin(x)*sinh(x) - ((1//2)*cos(x)*cosh(x)), 0)
+
+julia> integrate(cosh(2x)*sin(3x))
+(0.1538461538483747sinh(2x)*sin(3x) - (0.2307692307707381cosh(2x)*cos(3x)), 0)
+```
+
+You can run the integral test suite as `test_integrals()`.

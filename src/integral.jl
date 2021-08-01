@@ -1,47 +1,37 @@
 using LinearAlgebra
-using SpecialFunctions
+# using SpecialFunctions
 
+"""
+    isdependent returns true if eq is dependent on x
+"""
 isdependent(eq, x) = !isequal(expand_derivatives(Differential(x)(eq)), 0)
 
-kernelize(eq, x) = x
-kernelize(eq::Num, x) = kernelize(value(eq), x)
-kernelize(eq::T, x) where T<:Number = one(x)
-kernelize(eq::SymbolicUtils.Term, x) = (isdependent(eq,x) ? eq : one(x))
-kernelize(eq::SymbolicUtils.Pow, x) = (isdependent(eq,x) && arguments(eq)[2] < 0 ? eq*log(arguments(eq)[1]) : eq)
-kernelize(eq::SymbolicUtils.Mul, x) = prod(kernelize(t,x) for t in arguments(eq); init=one(x))
-kernelize(eq::SymbolicUtils.Add, x) = sum(kernelize(t,x) for t in arguments(eq) if isdependent(t,x); init=zero(x))
-
-function kernelize(eq::SymbolicUtils.Pow, x)
-    if !isdependent(eq,x) return eq end
-
-    p = arguments(eq)[1]
-    k = arguments(eq)[2]
-
-    if k >= 0
-        return eq * p
-    else
-        if !is_poly(p, x) return eq*log(p) end
-        q = poly(p)
-        r, s = find_roots(q, var(q))
-        r = nice_parameters(r)
-        s = Complex.(nice_parameters(real.(s[1:2:end])), nice_parameters(imag(s[1:2:end])))
-
-        q = sum(log(x - u) for u in r; init=zero(x)) +
-            sum(atan((x - real(u))/imag(u)) for u in s; init=zero(x)) +
-            sum(log(x^2 - 2*real(u)*x + imag(u)) for u in s; init=zero(x))
-
-        return eq * p * q
-    end
+# this is the main heurisctic used to find the test fragments
+function generate_basis(eq, x)
+    Δeq = expand_derivatives(Differential(x)(eq))
+    kers = expand(eq + Δeq)
+    return [one(x); candidates(kers, x)]
 end
 
+"""
+    candidates returns a list of candidate expressions to form the integration
+    basis
+"""
 candidates(eq, x) = isdependent(eq,x) ? [eq] : []
+
 candidates(eq::Num, x) = candidates(value(eq), x)
+
+# the candidates of an Add is the union of the candidates of the terms
+# ∫ Σᵢ fᵢ(x) dx = Σᵢ ∫ fᵢ(x) dx
 candidates(eq::SymbolicUtils.Add, x) = unique(∪([candidates(t,x) for t in arguments(eq)]...))
 
+# the candidates of a Mul is the outer product of the candidates of the terms
+# d(uv)/dx = u dv/dx + v + du/dx
 function candidates(eq::SymbolicUtils.Mul, x)
-    l = Any[one(x)]
     terms = [candidates(q,x) for q in arguments(eq)]
     n = length(terms)
+
+    l = Any[one(x)]
 
     for j = 1:n
         m = length(l)
@@ -52,77 +42,124 @@ function candidates(eq::SymbolicUtils.Mul, x)
         end
     end
 
-    unique(l[2:end])
+    unique(l[2:end])    # removing the initial 1
 end
 
+# the candidates of a Pow encode different integration rules
 function candidates(eq::SymbolicUtils.Pow, x)
     if !isdependent(eq,x) return [one(x)] end
-    p = arguments(eq)[1]
+
+    p = arguments(eq)[1]    # eq = p ^ k
     k = arguments(eq)[2]
 
-    # if k > 0
-    #     return [p^j for j=k+1:-1:0]
-    # else
-    #     return [j≈-1 ? log(p) : p^j for j=k-1:0]
-    # end
-
     if k == -1
-        return [p^-1, p, log(p)]
-    elseif !(k ≈ round(k)) && (2k ≈ round(2k))
-        return [p^j for j=k-1:k+2]
-    elseif k > 1
-        # return [p^j for j=1:k+1]
-        return [p^j for j=k+1:-1:0]
-    else
-        return [p^k, p^(k+1)]
+        return candidate_pow_minus_one(p, x)
+    elseif k ≈ 0.5 || k ≈ -0.5
+        # ∫ √f(x) dx = ... + c * log(df/dx + √f) if deg(f) == 2
+        Δ = expand_derivatives(Differential(x)(p))
+        return [[p^k, p^(k+1)]; log(abs(0.5*Δ + sqrt(p)))]
     end
+
+    # ∫ p^k dp = c * p^(k+1)
+    return [p^k, p^(k+1)]
 end
 
-function integrate(eq; abstol=1e-3, num_trials=5, num_zeros=5, lo=-5.0, hi=5.0, show_basis=false)
+function candidate_pow_minus_one(p, x)
+    q = to_poly(p, x)   # q is a DynamicPolynomials Polynomial
+                        # the reason is to be able to use find_roots
+    if q == nothing return [p, p^-1, log(p)] end
+
+    q = 0 + 1*q         # take care of monomials and constants
+    r, s = find_roots(q, var(q))
+    s = s[1:2:end]
+    r = nice_parameters(r)
+    s = Complex.(nice_parameters(real.(s)), nice_parameters(imag(s)))
+
+    # ∫ 1 / ((x-z₁)(x-z₂)) dx = ... + c₁ * log(x-z₁) + c₂ * log(x-z₂)
+    q = sum(log(x - u) for u in r; init=zero(x)) +
+        sum(atan((x - real(u))/imag(u)) for u in s; init=zero(x)) +
+        sum(log(x^2 - 2*real(u)*x + abs2(u)) for u in s; init=zero(x))
+
+    return [[p, p^-1]; candidates(q, x)]
+end
+
+###############################################################################
+
+"""
+    integrate is the main entry point
+
+    input:
+    ------
+    eq: a Symbolics expression to integrate
+    abstol: the desired tolerance
+    num_steps: the number of different steps with expanding basis to be tried
+    num_trials: the number of trials in each step (no changes to the basis)
+    lo and hi: the range used to generate random values of x (the independent variable)
+    show_basis: if true, the basis is printed
+
+    output:
+    -------
+    solved, unsolved
+
+    a pair of expressions, solved is the solved integral and unsolved is the residual unsolved
+    portion of the input
+"""
+function integrate(eq; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false)
     x = var(eq)
     if x == nothing
         @syms 𝑥
-        return 𝑥 * eq
+        return 𝑥 * eq, 0
     end
-    integrate(eq, x; abstol, num_trials, num_zeros, lo, hi, show_basis)
+    integrate(eq, x; abstol, num_trials, num_steps, lo, hi, show_basis)
 end
 
-function integrate(eq, x; abstol=1e-5, num_trials=5, num_zeros=5, lo=-5.0, hi=5.0, show_basis=false)
-    D = Differential(x)
+function integrate(eq::SymbolicUtils.Add, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false)
+    solved = 0
+    unsolved = 0
 
-    for i = 1:num_trials
-        y = try_integrate(eq, x, i; abstol, lo, hi, show_basis)
-        h = expand_derivatives(D(y)) - eq
-        j = 1
-        k = 0
-        while j <= num_zeros
-            x₀ = rand()*(hi - lo) + lo
-            try
-                ϵ = substitute(h, Dict(x => x₀))
-                if abs(ϵ) < abstol
-                    k +=1
-                    if k == num_zeros
-                        return y
-                    end
-                end
-                j += 1
-            catch e
-                # println(e)
-            end
-        end
-        abstol *= 0.1
+    for p in arguments(eq)
+        s, u = integrate(p, x; abstol, num_steps, num_trials, lo, hi, show_basis)
+        solved += s
+        unsolved += u
     end
-    @warn "no solution is found"
-    nothing
+
+    solved, unsolved
 end
 
-function try_integrate(eq, x, k; abstol=1e-5, lo=-5.0, hi=5.0, show_basis=true)
-    eq₁ = apply_integration_rules(eq)
-    basis = generate_basis(eq₁, x, k)
+function integrate(eq, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false)
+    eq₁ = apply_integration_rules(expand(eq))
+    basis = generate_basis(eq₁, x)
+
     if show_basis println(basis) end
-    D = Differential(x)
-    Δbasis = [expand_derivatives(D(f)) for f in basis]
 
+    D = Differential(x)
+
+    for i = 1:num_steps
+        basis = unique([basis; basis*x])
+        Δbasis = [expand_derivatives(D(f)) for f in basis]
+
+        for j = 1:num_trials
+            y, ϵ = try_integrate(eq, x, basis, Δbasis; abstol, lo, hi)
+            if ϵ < abstol return y, 0 end
+        end
+    end
+    # @warn "no solution is found"
+    0, eq
+end
+
+rms(x) = sqrt(sum(x.^2) / length(x))
+
+"""
+    the core of the randomized parameter-fitting algorithm
+
+    `try_integrate` tries to find a linear combination of the basis, whose
+    derivative is equal to eq
+
+    output
+    -------
+    integral, error
+"""
+function try_integrate(eq, x, basis, Δbasis; abstol=1e-6, lo=-5.0, hi=5.0, attemp_ratio=5)
     n = length(basis)
     # A is an nxn matrix holding the values of the fragments at n random points
     # b hold the value of the input function at those points
@@ -130,6 +167,8 @@ function try_integrate(eq, x, k; abstol=1e-5, lo=-5.0, hi=5.0, show_basis=true)
     b = zeros(n)
 
     i = 1
+    k = 1
+
     while i <= n
         x₀ = rand()*(hi - lo) + lo
         d = Dict(x => x₀)
@@ -142,32 +181,33 @@ function try_integrate(eq, x, k; abstol=1e-5, lo=-5.0, hi=5.0, show_basis=true)
         catch e
             # println("exclude ", x₀)
         end
+        if k > attemp_ratio*n return nothing, 1e6 end
+        k += 1
     end
 
+    # find a linearly independent subset of the basis
     l = find_independent_subset(A; abstol)
     A, b, basis = A[l,l], b[l], basis[l]
-    q = nice_parameters(A \ b)
-    sum(q[i]*basis[i] for i = 1:length(basis) if q[i] != 0; init=zero(x))
+
+    if det(A) ≈ 0 return nothing, 1e6 end
+
+    q₀ = A \ b
+    q = nice_parameters(q₀)
+    ϵ = rms(A * q - b)
+    sum(q[i]*basis[i] for i = 1:length(basis) if q[i] != 0; init=zero(x)), ϵ
 end
 
-# this is the main heurisctic used to find the test fragments
-function generate_basis(eq, x, k=1)
-    c = sum(candidates(eq, x))
-    D = Differential(x)
-    Δc = expand_derivatives(D(c))
-    μ = sum(x^i for i=0:k-1)
-    # p = expand((1+x) * (c + Δc))
-    p = expand(μ * (c + Δc))
-    kers = kernelize(p, x)
-    kers = expand(kers)
-    return [one(x); candidates(kers, x)]
-end
-
+"""
+    returns a list of the indices of a linearly independent subset of the columns of A
+"""
 function find_independent_subset(A; abstol=1e-5)
     _, R = qr(A)
     abs.(diag(R)) .> abstol
 end
 
+"""
+    converts float to int or small rational numbers
+"""
 function nice_parameters(p; abstol=1e-3)
     c = lcm(collect(1:10)...)
     n = length(p)
@@ -205,8 +245,6 @@ hyper_rule4 = @rule coth(~x) => cosh(~x) / sinh(~x)
 hyper_rules = [hyper_rule1, hyper_rule2, hyper_rule3, hyper_rule4]
 
 misc_rule1 = @rule sqrt(~x) => ^(~x, 0.5)
-misc_rule2 = @rule log(~x) => log(abs(~x))
-# misc_rule2 = @rule log(~x) => log(~x) * li(~x)
 
 misc_rules = [misc_rule1]
 
@@ -214,7 +252,9 @@ int_rules = [trig_rules; hyper_rules; misc_rules]
 
 apply_integration_rules(eq) = Fixpoint(Prewalk(PassThrough(Chain(int_rules))))(value(eq))
 
-########################## Test If a Polynomial? #############################
+########################## Convert to a Polynomial? #############################
+
+@polyvar 𝑦
 
 is_number(x::T) where T<:Integer = true
 is_number(x::T) where T<:Real = true
@@ -227,41 +267,35 @@ function is_poly(eq, x)
     all(is_number, values(p))
 end
 
-@parameters a b c d e f
+function to_poly(p::SymbolicUtils.Add, x)
+    l = [to_poly(t,x) for t in arguments(p)]
+    if any(x->x==nothing, l) return nothing end
+    sum(l; init=0)
+end
+
+function to_poly(p::SymbolicUtils.Mul, x)
+    l = [to_poly(t,x) for t in arguments(p)]
+    if any(x->x==nothing, l) return nothing end
+    prod(l; init=1)
+end
+
+function to_poly(p::SymbolicUtils.Pow, x)
+    if !isequal(arguments(p)[1], x) return nothing end
+    return 𝑦^arguments(p)[2]
+end
+
+to_poly(p::SymbolicUtils.Sym, x) = isequal(p, x) ? 𝑦 : nothing
+to_poly(p::SymbolicUtils.Term, x) = nothing
+to_poly(p, x) = is_number(p) ? p : nothing
 
 ##############################################################################
 
-function read_maxima_test(name)
-    fn = open(name, "r")
-
-    for line in readlines(fn)
-        println(line)
-        if length(line)>1 && line[1] == '['
-            line = replace(line, "%pi" => "π")
-            line = replace(line, "%e" => "ℯ")
-
-            i = findfirst(isequal(']'), line)
-            # try
-                l = eval(Meta.parse(line[1:i]))
-                p = l[1]
-                q = l[4]
-                dict = Dict(v => rand(-10:10) for v in get_variables(p) if !isequal(v,x))
-                println(dict)
-                p = substitute(p, dict)
-                q = substitute(q, dict)
-                printstyled(p, '\t'; color=:blue)
-                printstyled(q, '\t'; color=:green)
-                printstyled(integrate(p), '\n'; color=:red)
-            # catch e
-            # end
-        end
-    end
-
-    close(fn)
-end
-
 @syms x
 
+"""
+    a list of basic standard integral tests
+    based on http://integral-table.com/ with modifications
+"""
 basic_integrals = [
 # Basic Forms
     1,
@@ -408,14 +442,23 @@ basic_integrals = [
 function test_integrals()
     for eq in basic_integrals
         printstyled(eq, " =>\t"; color=:green)
-        printstyled(integrate(eq), '\n'; color=:red)
+        solved, unsolved = integrate(eq)
+        printstyled(solved; color=:white)
+        if isequal(unsolved, 0)
+            println()
+        else
+            printstyled(" + ∫ ", unsolved, '\n'; color=:red)
+        end
     end
 end
 
 ##################### Special Functions ######################################
 
-function li(x; n=10)
-    z = log(abs(x))
-    s = sum(z^k / (factorial(k) * k) for k = 1:n)
-    return SpecialFunctions.γ + log(z) + s
-end
+# """
+#     logarithmic integral
+# """
+# function li(x; n=10)
+#     z = log(abs(x))
+#     s = sum(z^k / (factorial(k) * k) for k = 1:n)
+#     return SpecialFunctions.γ + log(z) + s
+# end
