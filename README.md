@@ -213,6 +213,8 @@ Function `integrate` returns the integral of a Symbolics.jl expression with *con
 `integrate` returns a pair of expressions. The first one is the solved integral and the second one is the sum of the unsolved terms. If `integrate` is successful, the unsolved portion is reported as 0.
 
 ```julia
+@syms x
+
 julia> integrate(3x^3 + 2x - 5)
 (x^2 + (3//4)*(x^4) - (5x), 0)
 
@@ -229,7 +231,7 @@ julia> integrate(x^2/sqrt(4 + x^2))
 (2x*((4 + x^2)^-0.5) + (1//2)*(x^3)*((4 + x^2)^-0.5) - (2log(abs(x + sqrt(4 + x^2)))), 0)
 
 julia> integrate(x^2*log(x))
-((1//3)*log(x)*(x^3) - ((1//9)*(x^3)), 0)
+((1//3)*log(x)*(x^3) - ((1//9)*(x^3)), 0
 
 julia> integrate(x^2*exp(x))
 (2exp(x) + exp(x)*(x^2) - (2x*exp(x)), 0)
