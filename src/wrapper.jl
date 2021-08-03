@@ -21,7 +21,7 @@ function var(p::AbstractMonomialLike)
     end
 end
 
-var(p::AbstractTerm) = variable(p)
+var(p::AbstractTermLike) = variables(p)[1]
 
 function var(p)
     vars = get_variables(p)

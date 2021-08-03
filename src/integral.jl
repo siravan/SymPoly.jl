@@ -52,8 +52,8 @@ function candidates(eq::SymbolicUtils.Pow, x)
     p = arguments(eq)[1]    # eq = p ^ k
     k = arguments(eq)[2]
 
-    if k == -1
-        return candidate_pow_minus_one(p, x)
+    if k < 0 && k ≈ round(k)
+        return candidate_pow_minus(p, k, x)
     elseif k ≈ 0.5 || k ≈ -0.5
         # ∫ √f(x) dx = ... + c * log(df/dx + √f) if deg(f) == 2
         Δ = expand_derivatives(Differential(x)(p))
@@ -64,10 +64,10 @@ function candidates(eq::SymbolicUtils.Pow, x)
     return [p^k, p^(k+1)]
 end
 
-function candidate_pow_minus_one(p, x)
+function candidate_pow_minus(p, k, x)
     q = to_poly(p, x)   # q is a DynamicPolynomials Polynomial
                         # the reason is to be able to use find_roots
-    if q == nothing return [p, p^-1, log(p)] end
+    if q == nothing return [p^k, p^(k+1), log(p)] end
 
     q = 0 + 1*q         # take care of monomials and constants
     r, s = find_roots(q, var(q))
@@ -76,11 +76,26 @@ function candidate_pow_minus_one(p, x)
     s = Complex.(nice_parameters(real.(s)), nice_parameters(imag(s)))
 
     # ∫ 1 / ((x-z₁)(x-z₂)) dx = ... + c₁ * log(x-z₁) + c₂ * log(x-z₂)
-    q = sum(log(x - u) for u in r; init=zero(x)) +
-        sum(atan((x - real(u))/imag(u)) for u in s; init=zero(x)) +
-        sum(log(x^2 - 2*real(u)*x + abs2(u)) for u in s; init=zero(x))
+    # q = sum(log(x - u) for u in r; init=zero(x)) +
+    #     sum(atan((x - real(u))/imag(u)) for u in s; init=zero(x)) +
+    #     sum(log(x^2 - 2*real(u)*x + abs2(u)) for u in s; init=zero(x))
 
-    return [[p, p^-1]; candidates(q, x)]
+    q₁ = [[log(x - u) for u in r];
+          [atan((x - real(u))/imag(u)) for u in s];
+          [log(x^2 - 2*real(u)*x + abs2(u)) for u in s]
+         ]
+
+    q₂ = [[(x - u)^-1 for u in r];
+          [(x^2 - 2*real(u)*x + abs2(u))^-1 for u in s];
+          [x*(x^2 - 2*real(u)*x + abs2(u))^-1 for u in s]
+         ]
+
+    # return [[p^k, p^(k+1)]; candidates(q₁, x)]
+    if k ≈ -1
+        return [[p^k]; q₁; q₂]
+    else
+        return [[p^k, p^(k+1)]; q₁; q₂]
+    end
 end
 
 ###############################################################################
@@ -104,39 +119,68 @@ end
     a pair of expressions, solved is the solved integral and unsolved is the residual unsolved
     portion of the input
 """
-function integrate(eq; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
+function integrate(eq; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false)
     x = var(eq)
+    eq = expand(eq)
+
+    # eq is a constant
     if x == nothing
         @syms 𝑥
         return 𝑥 * eq, 0
     end
-    integrate(eq, x; abstol, num_trials, num_steps, lo, hi, show_basis, opt)
-end
 
-function integrate(eq::SymbolicUtils.Add, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
-    solved = 0
-    unsolved = 0
+    # check if eq is a rational function
+    # if so, we perform a partial-fraction decomposition first (the first part of the Hermite's method)
 
-    for p in arguments(eq)
-        s, u = integrate(p, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
-        solved += s
-        unsolved += u
+    # q = to_rational(eq, x)
+    # if q != nothing
+    #     eq = q
+    # end
+
+    s₁, u₁ = integrate_sum(eq, x; abstol, num_trials, num_steps, lo, hi, show_basis, opt, bypass)
+
+    if isequal(u₁, 0)
+        return s₁, u₁
+    else
+        s₂, u₂ = try_integration_by_parts(u₁, x; abstol, num_trials, num_steps, lo, hi, show_basis, opt)
+        return s₁ + s₂, u₂
     end
-
-    solved, unsolved
 end
 
-function integrate(eq, x; abstol=1e-6, num_steps=3, num_trials=7, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
-    eq₁ = apply_integration_rules(expand(eq))
-    basis = generate_basis(eq₁, x)
+"""
+    ∫ Σᵢ fᵢ(x) dx = Σᵢ ∫ fᵢ(x) dx
+"""
+function integrate_sum(eq::SymbolicUtils.Add, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false)
+    if bypass
+        return integrate_term(eq, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+    else
+        solved = 0
+        unsolved = 0
 
-    if show_basis println(basis) end
+        for p in arguments(eq)
+            s, u = integrate_term(p, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+            solved += s
+            unsolved += u
+        end
+
+        return solved, unsolved
+    end
+end
+
+function integrate_sum(eq, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false)
+    integrate_term(eq, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+end
+
+function integrate_term(eq, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
+    eq₁ = apply_integration_rules(eq)
+    basis = generate_basis(eq₁, x)
 
     D = Differential(x)
 
     for i = 1:num_steps
         basis = unique([basis; basis*x])
         Δbasis = [expand_derivatives(D(f)) for f in basis]
+        if show_basis println(basis) end
 
         for j = 1:num_trials
             y, ϵ = try_integrate(eq, x, basis, Δbasis; abstol, lo, hi, opt)
@@ -191,6 +235,7 @@ function try_integrate(eq, x, basis, Δbasis; abstol=1e-6, lo=-5.0, hi=5.0, atte
 
     if det(A) ≈ 0 return nothing, 1e6 end
 
+    # q₀ = A \ b
     q₀ = Optimize.init(opt, A, b)
     @views Optimize.sparse_regression!(q₀, A, permutedims(b)', opt, maxiter = 1000)
     q = nice_parameters(q₀)
@@ -227,6 +272,29 @@ function nice_parameters(p; abstol=1e-3)
         end
     end
     q
+end
+
+function try_integration_by_parts(eq, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
+    f = factors(eq, x)
+    if length(f) <= 2 return zero(x), eq end
+
+    D = Differential(x)
+
+    for u in f
+        v′ = eq / u
+        if !is_number(u) && !is_number(v′)
+            v, r = integrate_term(v′, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+            if isequal(r, 0)
+                uv = expand_derivatives(v*D(u))
+                s, r = integrate_sum(uv, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+                if isequal(r, 0)
+                    return expand(u*v - s), 0
+                end
+            end
+        end
+    end
+
+    return zero(x), eq
 end
 
 ########################## Transformation Rules ###############################
@@ -289,9 +357,64 @@ to_poly(p::SymbolicUtils.Sym, x) = isequal(p, x) ? 𝑦 : nothing
 to_poly(p::SymbolicUtils.Term, x) = nothing
 to_poly(p, x) = is_number(p) ? p : nothing
 
+function to_rational(p::SymbolicUtils.Mul, x)
+    P = one(x)
+    Q = one(x)
+
+    for t in arguments(p)
+        y = to_poly(t, x)
+        if y != nothing
+            P *= y
+        else
+            y = to_poly(1/t, x)
+            if y != nothing
+                Q *= y
+            else
+                return nothing
+            end
+        end
+    end
+
+    if is_number(P) || is_number(Q) return nothing end
+    return sym(factor_rational(P, Q), x)
+end
+
+to_rational(p, x) = nothing
+
+is_multiple_x(p::SymbolicUtils.Add, x) = all(is_multiple_x(t,x) for t in arguments(p))
+is_multiple_x(p::SymbolicUtils.Mul, x) = any(is_multiple_x(t,x) for t in arguments(p))
+is_multiple_x(p::SymbolicUtils.Pow, x) = isequal(arguments(p)[1], x) && arguments(p)[2] >= 1
+is_multiple_x(p::SymbolicUtils.Sym, x) = isequal(p, x)
+is_multiple_x(p, x) = false
+
+factors(eq, x) = isdependent(eq, x) ? [one(x), eq] : [one(x)]
+
+function factors(eq::SymbolicUtils.Pow, x)
+    p, k = arguments(eq)
+    [p^(i*sign(k)) for i=0:abs(k)]
+end
+
+function factors(eq::SymbolicUtils.Mul, x)
+    terms = [factors(q,x) for q in arguments(eq)]
+    n = length(terms)
+
+    l = Any[one(x)]
+
+    for j = 1:n
+        m = length(l)
+        for t in terms[j]
+            for k = 1:m
+                push!(l, l[k]*t)
+            end
+        end
+    end
+
+    unique(l)
+end
+
 ##############################################################################
 
-@syms x
+@syms x β
 
 """
     a list of basic standard integral tests
@@ -418,6 +541,9 @@ basic_integrals = [
     x * sin(x)^2,
     x * tan(x)^2,
     x * sec(x)^2,
+    x^3 * sin(x),
+    x^4 * cos(2x),
+    sin(x)^2 * cos(x)^3,
 # Products of Trigonometric Functions and Exponentials
     exp(x) * sin(x),
     exp(3x) * sin(2x),
@@ -438,17 +564,59 @@ basic_integrals = [
     sin(x) * sinh(x),
     sinh(x) * cosh(x),
     sinh(3x) * cosh(5x),
+# Misc
+    exp(x) / (1 + exp(x)),
+    cos(exp(x)) * sin(exp(x)) * exp(x),
+    cos(exp(x))^2 * sin(exp(x)) * exp(x),
+    1 / (x*log(x)),
+    (log(x - 1) + (x - 1)^-1) * log(x),
+    1 / (exp(x) - 1),
+    1 / (exp(x) + 5),
+    sqrt(x)*log(x),
+    log(log(x)) / x,
+    x^3 * exp(x^2),
+    cos(log(x)),
+    x * cos(x) * exp(x),
+    log(x - 1)^2,
+    1 / (exp(2x) - 1),
+    exp(x) / (exp(2x) - 1),
+    x / (exp(2x) - 1),
+# derivative-divide examples (Lamangna 7.10.2)
+    exp(x) * exp(exp(x)),
+    exp(sqrt(x)) / sqrt(x),
+    log(log(x)) / (x*log(x)),
+    log(cos(x)) * tan(x),
+# rothstein-Trager examples (Lamangna 7.10.9)
+    1 / (x^3 - x),
+    1 / (x^3 + 1),
+    1 / (x^2 - 8),
+    (x + 1) / (x^2 + 1),
+    x / (x^4 - 4),
+    x^3 / (x^4 + 1),
+    1 / (x^4 + 1),
+# bypass = true
+    β,      # turn of bypass = true
+    exp(x)/x - exp(x)/x^2,
+    cos(x)/x - sin(x)/x^2,
+    1/log(x) - 1/log(x)^2,
 ]
 
 function test_integrals()
+    bypass = false
+
     for eq in basic_integrals
-        printstyled(eq, " =>\t"; color=:green)
-        solved, unsolved = integrate(eq)
-        printstyled(solved; color=:white)
-        if isequal(unsolved, 0)
-            println()
+        if isequal(eq, β)
+            printstyled("**** bypass on ****\n"; color=:red)
+            bypass = true
         else
-            printstyled(" + ∫ ", unsolved, '\n'; color=:red)
+            printstyled(eq, " =>\t"; color=:green)
+            solved, unsolved = integrate(eq; bypass)
+            printstyled(solved; color=:white)
+            if isequal(unsolved, 0)
+                println()
+            else
+                printstyled(" + ∫ ", unsolved, '\n'; color=:red)
+            end
         end
     end
 end

@@ -208,7 +208,7 @@ julia> factor(p, q)
 
 ### Symbolic Integration
 
-Function `integrate` returns the integral of a Symbolics.jl expression with *constant* coefficients. It uses a randomized algorithm based on a hybrid of the method of indeterminate coefficients and SINDy (Sparse Identification of Nonlinear Dynamics) and is able to solve a subset of basic standard integrals (polynomials, exponential/logarithmic, trigonometric and hyperbolic, rational and squarer root).
+Function `integrate` returns the integral of a Symbolics.jl expression with *constant* coefficients. It uses a randomized algorithm based on a hybrid of the method of undetermined coefficients and sparse regression and is able to solve a subset of basic standard integrals (polynomials, exponential/logarithmic, trigonometric and hyperbolic, rational and squarer root).
 
 `integrate` returns a pair of expressions. The first one is the solved integral and the second one is the sum of the unsolved terms. If `integrate` is successful, the unsolved portion is reported as 0.
 
@@ -250,6 +250,9 @@ julia> integrate(cosh(x)*sin(x))
 
 julia> integrate(cosh(2x)*sin(3x))
 (0.1538461538483747sinh(2x)*sin(3x) - (0.2307692307707381cosh(2x)*cos(3x)), 0)
+
+julia> integrate(log(log(x))*(x^-1))
+(log(x)*log(log(x)) - log(x), 0)
 ```
 
 You can run the integral test suite as `test_integrals()`.

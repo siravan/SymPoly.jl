@@ -99,22 +99,24 @@ function Base.show(io::IO, f::FactoredPoly)
     end
 end
 
-function sym(f::FactoredPoly, r)
-    h = FactoredPoly(f.rational)
+function sym(f::FactoredPoly, x)
+    y = zero(x)
     for w in factors(f)
         v, k = first(w), last(w)
         if v isa AbstractPolynomialLike
-            add_factor!(h, sym(v, r), k)
+            y += sym(v, x)^k
         elseif v isa RationalPoly
-            cn, n = integer_poly(numerator(v))
-            cd, d = integer_poly(denominator(v))
-            c = cn ÷ cd
-            add_factor!(h, sym(c*n, r) / sym(d, r)^k, 1)
+            # cn, n = integer_poly(numerator(v))
+            # cd, d = integer_poly(denominator(v))
+            # c = cn ÷ cd
+            n = numerator(v)
+            d = denominator(v)            
+            y += sym(n, x) / sym(d, x)^k
         else
-            add_factor!(h, v, k)
+            y += v^k
         end
     end
-    h
+    y
 end
 
 SymbolicUtils.simplify(f::FactoredPoly) = prod(first(w)^last(w) for w in factors(f); init=1)

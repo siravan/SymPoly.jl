@@ -224,8 +224,7 @@ factor_schubert_kronecker(eq) = wrap(factor, eq)
 
     based on part of Algorithm 7.1 in "Computer Algebra, Concepts and Techniques" by Edmund A. Lamangna
 """
-function factor_rational(r::RationalPoly)
-    n, d = numerator(r), denominator(r)
+function factor_rational(n::AbstractPolynomialLike, d::AbstractPolynomialLike)
     !isequal(var(n), var(d)) && error("the numerator and denominator should have the same main variable")
 
     f = FactoredPoly(true)
@@ -257,5 +256,5 @@ function factor_rational(r::RationalPoly)
     f
 end
 
-factor_rational(p::AbstractPolynomial, q::AbstractPolynomial) = factor(p / q)
+factor_rational(r::RationalPoly) = factor_rational(numerator(r) / denominator(r))
 factor_rational(p, q) = wrap(factor, p, q)
