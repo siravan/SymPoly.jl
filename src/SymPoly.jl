@@ -1,4 +1,4 @@
-module SymPoly
+# module SymPoly
 
 using Primes
 
@@ -64,4 +64,4 @@ end
 Primes.factor(p, q) = factor_rational(p, q)
 Primes.factor(r::RationalPoly) = factor_rational(r)
 
-end # module
+# end # module

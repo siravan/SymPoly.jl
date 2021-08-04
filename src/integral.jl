@@ -119,14 +119,14 @@ end
     a pair of expressions, solved is the solved integral and unsolved is the residual unsolved
     portion of the input
 """
-function integrate(eq; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false)
+function integrate(eq; abstol=1e-6, num_steps=3, num_trials=5, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false, attempt_ratio=5)
     x = var(eq)
     eq = expand(eq)
 
     # eq is a constant
     if x == nothing
         @syms 𝑥
-        return 𝑥 * eq, 0
+        return 𝑥 * eq, 0, 0
     end
 
     # check if eq is a rational function
@@ -137,45 +137,51 @@ function integrate(eq; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, 
     #     eq = q
     # end
 
-    s₁, u₁ = integrate_sum(eq, x; abstol, num_trials, num_steps, lo, hi, show_basis, opt, bypass)
+    s₁, u₁, ϵ = integrate_sum(eq, x; bypass, abstol, num_trials, num_steps, lo, hi, show_basis, opt, attempt_ratio)
 
     if isequal(u₁, 0)
-        return s₁, u₁
+        return s₁, u₁, ϵ
     else
-        s₂, u₂ = try_integration_by_parts(u₁, x; abstol, num_trials, num_steps, lo, hi, show_basis, opt)
-        return s₁ + s₂, u₂
+        s₂, u₂, ϵ = try_integration_by_parts(u₁, x; abstol, num_trials, num_steps, lo, hi, show_basis, opt, attempt_ratio)
+        return s₁ + s₂, u₂, ϵ
     end
 end
 
 """
     ∫ Σᵢ fᵢ(x) dx = Σᵢ ∫ fᵢ(x) dx
 """
-function integrate_sum(eq::SymbolicUtils.Add, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false)
+function integrate_sum(eq::SymbolicUtils.Add, x; bypass=false, kwargs...)
     if bypass
-        return integrate_term(eq, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+        return integrate_term(eq, x; kwargs...)
     else
         solved = 0
         unsolved = 0
+        ϵ₀ = 0
 
         for p in arguments(eq)
-            s, u = integrate_term(p, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+            s, u, ϵ = integrate_term(p, x; kwargs...)
             solved += s
             unsolved += u
+            ϵ₀ = max(ϵ₀, ϵ)
         end
 
-        return solved, unsolved
+        return solved, unsolved, ϵ₀
     end
 end
 
-function integrate_sum(eq, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false)
-    integrate_term(eq, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+function integrate_sum(eq, x; kwargs...)
+    integrate_term(eq, x; kwargs...)
 end
 
-function integrate_term(eq, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
+function integrate_term(eq, x; kwargs...)
+    args = Dict(kwargs)
+    abstol, num_steps, num_trials, show_basis = args[:abstol], args[:num_steps], args[:num_trials], args[:show_basis]
+
     eq₁ = apply_integration_rules(eq)
     basis = generate_basis(eq₁, x)
 
     D = Differential(x)
+    ϵ₀ = Inf
 
     for i = 1:num_steps
         basis = unique([basis; basis*x])
@@ -183,12 +189,12 @@ function integrate_term(eq, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, 
         if show_basis println(basis) end
 
         for j = 1:num_trials
-            y, ϵ = try_integrate(eq, x, basis, Δbasis; abstol, lo, hi, opt)
-            if ϵ < abstol return y, 0 end
+            y, ϵ = try_integrate(Float64, eq, x, basis, Δbasis; kwargs...)
+            if ϵ < abstol return y, 0, ϵ else ϵ₀ = min(ϵ, ϵ₀) end
         end
     end
     # @warn "no solution is found"
-    0, eq
+    0, eq, ϵ₀
 end
 
 rms(x) = sqrt(sum(x.^2) / length(x))
@@ -203,12 +209,15 @@ rms(x) = sqrt(sum(x.^2) / length(x))
     -------
     integral, error
 """
-function try_integrate(eq, x, basis, Δbasis; abstol=1e-6, lo=-5.0, hi=5.0, attemp_ratio=5, opt = STLSQ(exp.(-10:1:0)))
+function try_integrate(T, eq, x, basis, Δbasis; kwargs...)
+    args = Dict(kwargs)
+    abstol, opt, lo, hi, attempt_ratio = args[:abstol], args[:opt], args[:lo], args[:hi], args[:attempt_ratio]
+
     n = length(basis)
     # A is an nxn matrix holding the values of the fragments at n random points
     # b hold the value of the input function at those points
-    A = zeros(n, n)
-    b = zeros(n)
+    A = zeros(T, (n, n))
+    b = zeros(T, n)
 
     i = 1
     k = 1
@@ -218,28 +227,34 @@ function try_integrate(eq, x, basis, Δbasis; abstol=1e-6, lo=-5.0, hi=5.0, atte
         d = Dict(x => x₀)
         try
             for j = 1:n
-                A[i, j] = Float64(substitute(Δbasis[j], d))
+                A[i, j] = T(substitute(Δbasis[j], d))
             end
-            b[i] = Float64(substitute(eq, d))
+            b[i] = T(substitute(eq, d))
             i += 1
         catch e
             # println("exclude ", x₀)
         end
-        if k > attemp_ratio*n return nothing, 1e6 end
+        if k > attempt_ratio*n return nothing, 1e6 end
         k += 1
     end
 
     # find a linearly independent subset of the basis
     l = find_independent_subset(A; abstol)
-    A, b, basis = A[l,l], b[l], basis[l]
+    A, b, basis, Δbasis, n = A[l,l], b[l], basis[l], Δbasis[l], sum(l)
 
     if det(A) ≈ 0 return nothing, 1e6 end
+
+    coefs = ones(T, n)
+    for j = 1:n
+        coefs[j] = coef(Δbasis[j], x)
+        A[:,j] /= coefs[j]
+    end
 
     # q₀ = A \ b
     q₀ = Optimize.init(opt, A, b)
     @views Optimize.sparse_regression!(q₀, A, permutedims(b)', opt, maxiter = 1000)
-    q = nice_parameters(q₀)
-    ϵ = rms(A * q - b)
+    ϵ = rms(A * q₀ - b)
+    q = nice_parameters(q₀ ./ coefs)
     sum(q[i]*basis[i] for i = 1:length(basis) if q[i] != 0; init=zero(x)), ϵ
 end
 
@@ -266,7 +281,7 @@ function nice_parameters(p; abstol=1e-3)
                 q[i] = (denominator(a) == 1 ? numerator(a) : a)
                 den = 10
             else
-                q[i] = p[i]
+                q[i] = Float64(p[i])
             end
             den += 1
         end
@@ -274,27 +289,30 @@ function nice_parameters(p; abstol=1e-3)
     q
 end
 
-function try_integration_by_parts(eq, x; abstol=1e-6, num_steps=3, num_trials=2, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)))
+function try_integration_by_parts(eq, x; kwargs...)
     f = factors(eq, x)
-    if length(f) <= 2 return zero(x), eq end
+    if length(f) <= 2 return zero(x), eq, Inf end
 
     D = Differential(x)
+    ϵ₀ = Inf
 
     for u in f
         v′ = eq / u
         if !is_number(u) && !is_number(v′)
-            v, r = integrate_term(v′, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+            v, r, ϵ = integrate_term(v′, x; kwargs...)
             if isequal(r, 0)
                 uv = expand_derivatives(v*D(u))
-                s, r = integrate_sum(uv, x; abstol, num_steps, num_trials, lo, hi, show_basis, opt)
+                s, r, ϵ = integrate_sum(uv, x; kwargs...)
                 if isequal(r, 0)
-                    return expand(u*v - s), 0
+                    return expand(u*v - s), 0, ϵ
+                else
+                    ϵ₀ = min(ϵ, ϵ₀)
                 end
             end
         end
     end
 
-    return zero(x), eq
+    return zero(x), eq, ϵ₀
 end
 
 ########################## Transformation Rules ###############################
@@ -411,6 +429,10 @@ function factors(eq::SymbolicUtils.Mul, x)
 
     unique(l)
 end
+
+coef(eq::SymbolicUtils.Mul, x) = prod(t for t in arguments(eq) if !isdependent(t,x); init=1)
+coef(eq::SymbolicUtils.Add, x) = minimum(coef(t,x) for t in arguments(eq))
+coef(eq, x) = 1
 
 ##############################################################################
 
@@ -603,6 +625,7 @@ basic_integrals = [
 
 function test_integrals()
     bypass = false
+    misses = []
 
     for eq in basic_integrals
         if isequal(eq, β)
@@ -616,8 +639,15 @@ function test_integrals()
                 println()
             else
                 printstyled(" + ∫ ", unsolved, '\n'; color=:red)
+                push!(misses, eq)
             end
         end
+    end
+
+    n = length(misses)
+    if n > 0 println("**** missess (n=$n) *****") end
+    for eq in misses
+        printstyled(eq, '\n'; color=:red)
     end
 end
 
