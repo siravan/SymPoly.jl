@@ -6,11 +6,14 @@ using LinearAlgebra
 """
 isdependent(eq, x) = !isequal(expand_derivatives(Differential(x)(eq)), 0)
 
+Base.signbit(z::Complex{T}) where T<:Number = signbit(real(z))
+
 # this is the main heurisctic used to find the test fragments
-function generate_basis(eq, x)
+function generate_basis(eq, x, h=[])
     Δeq = expand_derivatives(Differential(x)(eq))
     kers = expand(eq + Δeq)
-    return [one(x); candidates(kers, x)]
+    # return [one(x); candidates(kers, x); h]
+    return [one(x); candidates(kers, x); h]
 end
 
 """
@@ -57,7 +60,8 @@ function candidates(eq::SymbolicUtils.Pow, x)
     elseif k ≈ 0.5 || k ≈ -0.5
         # ∫ √f(x) dx = ... + c * log(df/dx + √f) if deg(f) == 2
         Δ = expand_derivatives(Differential(x)(p))
-        return [[p^k, p^(k+1)]; log(abs(0.5*Δ + sqrt(p)))]
+        # return [[p^k, p^(k+1)]; log(abs(0.5*Δ + sqrt(p)))]
+        return [[p^k, p^(k+1)]; log(0.5*Δ + sqrt(p))]
     end
 
     # ∫ p^k dp = c * p^(k+1)
@@ -72,8 +76,9 @@ function candidate_pow_minus(p, k, x)
     q = 0 + 1*q         # take care of monomials and constants
     r, s = find_roots(q, var(q))
     s = s[1:2:end]
-    r = nice_parameters(r)
-    s = Complex.(nice_parameters(real.(s)), nice_parameters(imag(s)))
+    r = nice_parameter.(r)
+    s = nice_parameter.(s)
+    # s = Complex.(nice_parameters(real.(s)), nice_parameters(imag(s)))
 
     # ∫ 1 / ((x-z₁)(x-z₂)) dx = ... + c₁ * log(x-z₁) + c₂ * log(x-z₂)
     # q = sum(log(x - u) for u in r; init=zero(x)) +
@@ -119,8 +124,15 @@ end
     a pair of expressions, solved is the solved integral and unsolved is the residual unsolved
     portion of the input
 """
-function integrate(eq; abstol=1e-6, num_steps=3, num_trials=5, lo=-5.0, hi=5.0, show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false, attempt_ratio=5)
+function integrate(eq; kwargs...)
     x = var(eq)
+    integrate(eq, x; kwargs...)
+end
+
+function integrate(eq, x; abstol=1e-6, num_steps=2, num_trials=10, radius=5.0,
+                   show_basis=false, opt = STLSQ(exp.(-10:1:0)), bypass=false,
+                   attempt_ratio=5, symbolic=false, bypart=true, max_basis=110,
+                   verbose=false)
     eq = expand(eq)
 
     # eq is a constant
@@ -137,12 +149,15 @@ function integrate(eq; abstol=1e-6, num_steps=3, num_trials=5, lo=-5.0, hi=5.0, 
     #     eq = q
     # end
 
-    s₁, u₁, ϵ = integrate_sum(eq, x; bypass, abstol, num_trials, num_steps, lo, hi, show_basis, opt, attempt_ratio)
+    s₁, u₁, ϵ = integrate_sum(eq, x; bypass, abstol, num_trials, num_steps,
+                              radius, show_basis, opt, attempt_ratio, symbolic, max_basis, verbose)
 
-    if isequal(u₁, 0)
+    if isequal(u₁, 0) || !bypart
         return s₁, u₁, ϵ
     else
-        s₂, u₂, ϵ = try_integration_by_parts(u₁, x; abstol, num_trials, num_steps, lo, hi, show_basis, opt, attempt_ratio)
+        s₂, u₂, ϵ = try_integration_by_parts(u₁, x; abstol, num_trials, num_steps,
+                                             radius, show_basis, opt, attempt_ratio,
+                                             symbolic, max_basis, verbose)
         return s₁ + s₂, u₂, ϵ
     end
 end
@@ -173,28 +188,66 @@ function integrate_sum(eq, x; kwargs...)
     integrate_term(eq, x; kwargs...)
 end
 
+function accept_solution(eq, x, sol; abstol=1e-6)
+    try
+        Δ = substitute(expand_derivatives(Differential(x)(sol)-eq), Dict(x => Complex(rand())))
+        return abs(Δ) < abstol
+    catch e
+        #
+    end
+    return false
+end
+
 function integrate_term(eq, x; kwargs...)
     args = Dict(kwargs)
-    abstol, num_steps, num_trials, show_basis = args[:abstol], args[:num_steps], args[:num_trials], args[:show_basis]
+    abstol, num_steps, num_trials, show_basis, symbolic, verbose, max_basis, radius =
+        args[:abstol], args[:num_steps], args[:num_trials], args[:show_basis],
+        args[:symbolic], args[:verbose], args[:max_basis], args[:radius]
 
-    eq₁ = apply_integration_rules(eq)
-    basis = generate_basis(eq₁, x)
+    # note that the order of the operations is important!
+    # first, collecing hints, then applying transformation rules, and finally finding the basis.
+    h = collect_hints(eq, x)
+    eq = apply_integration_rules(eq)
+    basis = generate_basis(eq, x, h)
+
+    if verbose printstyled("|β| = ", length(basis), ". "; color=:yellow) end
+    if length(basis) > max_basis return 0, eq, Inf end
 
     D = Differential(x)
     ϵ₀ = Inf
+    y₀ = 0
 
     for i = 1:num_steps
         basis = unique([basis; basis*x])
         Δbasis = [expand_derivatives(D(f)) for f in basis]
-        if show_basis println(basis) end
+        if show_basis println(basis); println(Δbasis) end
+
+        if symbolic
+            y, ϵ = try_symbolic(Float64, eq, x, basis, Δbasis; kwargs...)
+            if !isequal(y, 0) && accept_solution(eq, x, y; abstol)
+                if verbose printstyled("$i, symbolic\n"; color=:yellow) end
+                return y, 0, 0
+            end
+        end
 
         for j = 1:num_trials
-            y, ϵ = try_integrate(Float64, eq, x, basis, Δbasis; kwargs...)
-            if ϵ < abstol return y, 0, ϵ else ϵ₀ = min(ϵ, ϵ₀) end
+            y, ϵ = try_integrate(Complex{Float64}, eq, x, basis, Δbasis, radius*rand(); kwargs...)
+            if ϵ < abstol && accept_solution(eq, x, y; abstol)
+                if verbose printstyled("$i, $j\n"; color=:yellow) end
+                return y, 0, ϵ
+            else
+                ϵ₀ = min(ϵ, ϵ₀)
+                y₀ = y
+            end
         end
     end
-    # @warn "no solution is found"
-    0, eq, ϵ₀
+
+    if accept_solution(eq, x, y₀; abstol)
+        if verbose printstyled("rescue\n"; color=:yellow) end
+        return y₀, 0, ϵ₀
+    else
+        return 0, eq, ϵ₀
+    end
 end
 
 rms(x) = sqrt(sum(x.^2) / length(x))
@@ -209,9 +262,9 @@ rms(x) = sqrt(sum(x.^2) / length(x))
     -------
     integral, error
 """
-function try_integrate(T, eq, x, basis, Δbasis; kwargs...)
+function try_integrate(T, eq, x, basis, Δbasis, radius; kwargs...)
     args = Dict(kwargs)
-    abstol, opt, lo, hi, attempt_ratio = args[:abstol], args[:opt], args[:lo], args[:hi], args[:attempt_ratio]
+    abstol, opt, attempt_ratio = args[:abstol], args[:opt], args[:attempt_ratio]
 
     n = length(basis)
     # A is an nxn matrix holding the values of the fragments at n random points
@@ -223,7 +276,11 @@ function try_integrate(T, eq, x, basis, Δbasis; kwargs...)
     k = 1
 
     while i <= n
-        x₀ = rand()*(hi - lo) + lo
+        if T isa Complex
+            x₀ = T(radius*randn()*cis(2π*rand()))
+        else
+            x₀ = T(radius*rand())
+        end
         d = Dict(x => x₀)
         try
             for j = 1:n
@@ -232,7 +289,7 @@ function try_integrate(T, eq, x, basis, Δbasis; kwargs...)
             b[i] = T(substitute(eq, d))
             i += 1
         catch e
-            # println("exclude ", x₀)
+            println("basis matrix error: ", e)
         end
         if k > attempt_ratio*n return nothing, 1e6 end
         k += 1
@@ -254,16 +311,62 @@ function try_integrate(T, eq, x, basis, Δbasis; kwargs...)
     q₀ = Optimize.init(opt, A, b)
     @views Optimize.sparse_regression!(q₀, A, permutedims(b)', opt, maxiter = 1000)
     ϵ = rms(A * q₀ - b)
-    q = nice_parameters(q₀ ./ coefs)
-    sum(q[i]*basis[i] for i = 1:length(basis) if q[i] != 0; init=zero(x)), ϵ
+    q = nice_parameter.(q₀ ./ coefs)
+    sum(q[i]*basis[i] for i = 1:length(basis) if q[i] != 0; init=zero(x)), abs(ϵ)
 end
+
+function find_independent_basis(T, eq, x, Δbasis; kwargs...)
+    args = Dict(kwargs)
+    abstol, opt, radius, attempt_ratio = args[:abstol], args[:opt], args[:radius], args[:attempt_ratio]
+
+    n = length(Δbasis)
+    A = zeros(T, (n, n))
+
+    i = 1
+    k = 1
+
+    while i <= n
+        if T isa Complex
+            x₀ = T(radius*randn()*cis(2π*rand()))
+        else
+            x₀ = T(radius*rand())
+        end
+        d = Dict(x => x₀)
+        try
+            for j = 1:n
+                A[i, j] = T(substitute(Δbasis[j], d))
+            end
+            i += 1
+        catch e
+            println(e)
+        end
+        if k > attempt_ratio*n return nothing, 1e6 end
+        k += 1
+    end
+
+    # find a linearly independent subset of the basis
+    find_independent_subset(A; abstol)
+end
+
 
 """
     returns a list of the indices of a linearly independent subset of the columns of A
 """
-function find_independent_subset(A; abstol=1e-5)
-    _, R = qr(A)
+function find_independent_subset(A; abstol=1e-3)
+    Q, R = qr(A)
     abs.(diag(R)) .> abstol
+end
+
+function find_independent_subset2(A; abstol=1e-3)
+    n = size(A, 1)
+    l = BitVector(undef, n)
+    for i = 1:n
+        l[i] = 1
+        if abs(det(A[l,l])) < abstol
+            l[i] = 0
+        end
+    end
+    l
 end
 
 """
@@ -289,6 +392,26 @@ function nice_parameters(p; abstol=1e-3)
     q
 end
 
+function nice_parameter(u::T; abstol=1e-3, M=10) where T<:Real
+    c = lcm(collect(1:M)...)
+    for den = 1:M
+        try
+            if abs(round(u*den) - u*den) < abstol
+                a = round(Int, u*den) // den
+                return (denominator(a) == 1 ? numerator(a) : a)
+            end
+        catch e
+        end
+    end
+    return u
+end
+
+function nice_parameter(u::Complex{T}; abstol=1e-3, M=10) where T<:Real
+    α = nice_parameter(real(u))
+    β = nice_parameter(imag(u))
+    return β ≈ 0 ? α : Complex(α, β)
+end
+
 function try_integration_by_parts(eq, x; kwargs...)
     f = factors(eq, x)
     if length(f) <= 2 return zero(x), eq, Inf end
@@ -306,7 +429,8 @@ function try_integration_by_parts(eq, x; kwargs...)
                 if isequal(r, 0)
                     return expand(u*v - s), 0, ϵ
                 else
-                    ϵ₀ = min(ϵ, ϵ₀)
+                    zero(x), eq, ϵ
+                    # ϵ₀ = min(ϵ, ϵ₀)
                 end
             end
         end
@@ -315,11 +439,100 @@ function try_integration_by_parts(eq, x; kwargs...)
     return zero(x), eq, ϵ₀
 end
 
+var_index(v) = istree(v) && Symbol(operation(v)) == :getindex ? arguments(v)[2] : -1
+
+function try_symbolic(T, eq, x, basis, Δbasis; kwargs...)
+    n = length(basis)
+    @syms θ[1:n]
+    D = Differential(x)
+    Δeq = expand(sum(θ[j]*Δbasis[j] for j=1:n) - eq)
+
+    terms = collect_terms(Δeq, x)
+    eqs = collect(values(terms))
+    # eqs = filter(p->length(get_variables(p)) > 0, eqs)
+
+    sol = solve_symbolic(eqs)
+
+    for i = 1:n
+        if !haskey(sol, θ[i])
+            sol[θ[i]] = 0
+        end
+    end
+
+    p = substitute(expand(sum(θ[j]*basis[j] for j=1:n)), sol)
+    p, 0
+end
+
+mutable struct Fragment
+    eq
+    lhs
+end
+
+function solve_symbolic(eqs)
+    n = length(eqs)
+    solved = Set()
+    unfinished = true
+    frags = Fragment[]
+    k = 1
+
+    while unfinished
+        unfinished = false
+        for eq in eqs
+            δf = [v for v in get_variables(eq) if v ∉ solved]
+            if length(δf) == 1
+                push!(solved, δf[1])
+                push!(frags, Fragment(eq, δf[1]))
+                unfinished = true
+            end
+        end
+    end
+
+    sol = Dict()
+    for f in frags
+        eq = substitute(f.eq, sol)
+        u = Symbolics.solve_for(eq ~ 0, f.lhs)
+        sol[f.lhs] = nice_parameter(u)
+    end
+
+    sys = []
+    vars = Set()
+
+    for eq in eqs
+        δf = [v for v in get_variables(eq) if v ∉ solved]
+        if length(δf) > 1
+            for v in δf
+                push!(vars, v)
+            end
+            q = substitute(eq, sol)
+            push!(sys, q)
+        end
+    end
+
+    sys = unique(sys)
+    vars = [v for v in vars]
+
+    if !isempty(vars) && length(vars) == length(sys)
+        try
+            vals = nice_parameters.(Symbolics.solve_for(sys .~ 0, vars))
+            # vals = Symbolics.solve_for(sys .~ 0, vars)
+            for (v,u) in zip(vars, vals)
+                sol[v] = u
+            end
+        catch e
+            # println("from symbolic: ", e)
+        end
+    end
+
+    sol
+end
+
 ########################## Transformation Rules ###############################
 
 trig_rule1 = @rule tan(~x) => sin(~x) / cos(~x)
 trig_rule2 = @rule sec(~x) => one(~x) / cos(~x)
+# trig_rule2 = @rule sec(~x) => (tan(~x)/cos(~x) + 1/cos(~x)^2) / (tan(~x) + 1/cos(~x))
 trig_rule3 = @rule csc(~x) => one(~x) / sin(~x)
+# trig_rule3 = @rule csc(~x) => (cot(~x)/sin(~x) + 1/sin(~x)^2) / (cot(~x) + 1/sin(~x))
 trig_rule4 = @rule cot(~x) => cos(~x) / sin(~x)
 
 trig_rules = [trig_rule1, trig_rule2, trig_rule3, trig_rule4]
@@ -336,8 +549,45 @@ misc_rule1 = @rule sqrt(~x) => ^(~x, 0.5)
 misc_rules = [misc_rule1]
 
 int_rules = [trig_rules; hyper_rules; misc_rules]
+# int_rules = misc_rules
 
 apply_integration_rules(eq) = Fixpoint(Prewalk(PassThrough(Chain(int_rules))))(value(eq))
+
+
+function U(u...)
+    u = map(x -> x isa AbstractArray ? x : [], u)
+    return union(u...)
+end
+
+hints(eq::SymbolicUtils.Add, x, h) = map(t->hints(t,x,h), arguments(eq))
+hints(eq::SymbolicUtils.Mul, x, h) = map(t->hints(t,x,h), arguments(eq))
+hints(eq::SymbolicUtils.Pow, x, h) = hints(arguments(eq)[1],x,h)
+
+function hints(eq::SymbolicUtils.Term, x, h)
+    s = Symbol(operation(eq))
+    u = arguments(eq)[1]
+
+    if s == :sec
+        push!(h, log(1/cos(u) + sin(u)/cos(u)))
+    elseif s == :csc
+        push!(h, log(1/sin(u) - cos(u)/sin(u)))
+    elseif s == :tan
+        push!(h, log(cos(u)))
+    elseif s == :cot
+        push!(h, log(sin(u)))
+    elseif s == :tanh
+        push!(h, log(cosh(u)))
+    end
+end
+
+function hints(eq, x, h)
+end
+
+function collect_hints(eq, x)
+    h = []
+    hints(eq, x, h)
+    h
+end
 
 ########################## Convert to a Polynomial? #############################
 
@@ -431,8 +681,32 @@ function factors(eq::SymbolicUtils.Mul, x)
 end
 
 coef(eq::SymbolicUtils.Mul, x) = prod(t for t in arguments(eq) if !isdependent(t,x); init=1)
-coef(eq::SymbolicUtils.Add, x) = minimum(coef(t,x) for t in arguments(eq))
+coef(eq::SymbolicUtils.Add, x) = minimum(abs(coef(t,x)) for t in arguments(eq))
 coef(eq, x) = 1
+
+function collect_terms(eq::SymbolicUtils.Add, x)
+    d = Dict{Any,Any}(1 => 0)
+    for t in arguments(eq)
+        if isdependent(t, x)
+            for s in collect_terms(t, x)
+                v, c = first(s), last(s)
+                if haskey(d, v)
+                    d[v] += c
+                else
+                    d[v] = c
+                end
+            end
+        else
+            d[1] += t
+        end
+    end
+    d
+end
+
+function collect_terms(eq, x)
+    c = coef(eq, x)
+    return Dict(eq/c => c)
+end
 
 ##############################################################################
 
@@ -542,13 +816,9 @@ basic_integrals = [
     tan(x)^2,
     tan(x)^3,
     sec(x),
-    sec(x)^2,
-    sec(x)^3,
     sec(x) * tan(x),
     sec(x)^2 * tan(x),
     csc(x),
-    csc(x)^2,
-    csc(x)^3,
     sec(x) * csc(x),
 # Products of Trigonometric Functions and Monomials
     x * cos(x),
@@ -597,7 +867,7 @@ basic_integrals = [
     sqrt(x)*log(x),
     log(log(x)) / x,
     x^3 * exp(x^2),
-    cos(log(x)),
+    sin(log(x)),
     x * cos(x) * exp(x),
     log(x - 1)^2,
     1 / (exp(2x) - 1),
@@ -623,9 +893,10 @@ basic_integrals = [
     1/log(x) - 1/log(x)^2,
 ]
 
-function test_integrals()
+function test_integrals(; symbolic=false, num_trials=3, verbose=false, bypart=true)
     bypass = false
     misses = []
+    D = Differential(x)
 
     for eq in basic_integrals
         if isequal(eq, β)
@@ -633,7 +904,7 @@ function test_integrals()
             bypass = true
         else
             printstyled(eq, " =>\t"; color=:green)
-            solved, unsolved = integrate(eq; bypass)
+            solved, unsolved = integrate(eq; bypass, symbolic, num_trials, verbose, bypart)
             printstyled(solved; color=:white)
             if isequal(unsolved, 0)
                 println()
